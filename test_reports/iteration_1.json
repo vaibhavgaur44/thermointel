@@ -1,0 +1,21 @@
+{
+  "summary": "ThermoIntel API regression suite passed 2/2. UI dashboard, map, Gujarat scope change, investigation panel, all navigation views, FIRMS unavailable state, and responsive layout were exercised. Analyst integration is configured in this environment and returned a grounded response.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Thermal map test hook", "issue": "data-testid=thermal-map is present on a hidden duplicate div while the visible Leaflet map has no matching test id; strict visibility-based automation fails on the hidden node.", "selector": "[data-testid=thermal-map]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_thermointel_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": ["Move data-testid=thermal-map onto the visible Leaflet map container or use a distinct visible wrapper; remove the hidden duplicate hook."],
+  "critical_code_review_comments": ["Frontend API calls correctly use REACT_APP_BACKEND_URL and backend excludes Mongo _id from returned documents."],
+  "updated_files": ["/app/backend/tests/test_thermointel_api.py", "/app/test_reports/iteration_1.json"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "seed_data_creation": "No new seed data; existing synthetic fixtures were used and remained labeled DEMO DATA.",
+  "retest_needed": true,
+  "should_call_test_agent_after_fix": true,
+  "context_for_next_testing_agent": "All requested API endpoints and primary dashboard flows covered. Retest the thermal-map test hook after moving it to the visible map. Analyst was tested with configured Emergent integration; no secret was exposed.",
+  "rca of the issue": "The App renders the React-Leaflet MapContainer with data-testid, but React-Leaflet does not forward that prop to the actual DOM container. A second hidden div with the same data-testid was added as a workaround, causing locator visibility/strictness failure. Use a visible wrapper test id or select .leaflet-container."
+}

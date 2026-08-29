@@ -1,0 +1,61 @@
+{
+  "app_name": "ThermoIntel",
+  "theme": "dark",
+  "archetype": "THE PERFORMANCE PRO / TACTICAL INDUSTRIAL COMMAND",
+  "typography": {
+    "headings": {
+      "font_family": "Barlow Condensed, sans-serif",
+      "weights": ["600", "700", "900"],
+      "letter_spacing": "tracking-tight"
+    },
+    "body": {
+      "font_family": "Inter, sans-serif",
+      "weights": ["400", "500", "600"]
+    },
+    "mono": {
+      "font_family": "JetBrains Mono, monospace"
+    }
+  },
+  "colors": {
+    "background": "#090A0F",
+    "surface": "#12151E",
+    "surface_elevated": "#1A1F2C",
+    "border": "#2A3245",
+    "primary": "#FF3B30",
+    "primary_hover": "#FF5247",
+    "accent_blue": "#0A84FF",
+    "warning_amber": "#FF9F0A",
+    "success_green": "#30D158",
+    "text_main": "#F5F7FA",
+    "text_muted": "#8E9EAF"
+  },
+  "image_urls": [
+    {
+      "category": "industrial_hero_drone",
+      "url": "https://images.unsplash.com/photo-1569220809554-ea135cd2d537",
+      "description": "Aerial view of industrial terminal and refinery infrastructure at night"
+    },
+    {
+      "category": "refinery_flare",
+      "url": "https://images.unsplash.com/photo-1566221857770-508d35ee6220",
+      "description": "Refinery plant with flare stack and night operations"
+    }
+  ],
+  "components": [
+    "IndiaRegionSelector",
+    "FirmsIngestionPanel",
+    "OsmIndustrialContext",
+    "ThermalAnomalyMap",
+    "PersistentSourcesList",
+    "HistoricalActivityView",
+    "AnomalyStatusDashboard",
+    "TransparentPriorityScoreWidget",
+    "ExplainableClassificationCard",
+    "AlertsFeed",
+    "IngestionStatusMonitor",
+    "ModelStatusInspector",
+    "AnalystChatAssistant",
+    "DemoRealDataToggle"
+  ],
+  "instructions_to_main_agent": "Build the complete runnable ThermoIntel web platform for industrial thermal intelligence in India with FastAPI backend and React frontend. Ensure all data models support MongoDB storage, FIRMS ingestion, OSM industrial context cross-matching, ML classification, persistence analysis, transparent priority scoring, and GPT-5.4 Analyst chat. Clearly badge DEMO DATA where real API keys are missing. Ensure high-density tactical command center UI styling without pure black/gray monotony."
+}
