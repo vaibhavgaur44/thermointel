@@ -14,7 +14,7 @@ try:
 except ImportError:
     requests = None
 
-from services import model_inference, feature_engineering, firms_pipeline, osm_facilities
+from services import model_inference, feature_engineering, firms_pipeline, osm_facilities, firms_scheduler
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -134,6 +134,8 @@ async def startup():
         await firms_pipeline.ensure_indexes(db)
     except Exception as exc:
         logger.warning("Index setup skipped: %s", exc)
+    all_india = REGIONS["all-india"]
+    firms_scheduler.start(db, all_india["bbox"], all_india["label"])
 
 @api.get("/")
 async def root():
@@ -207,7 +209,7 @@ async def ml_classify(req: MLClassifyRequest):
 
 @api.get("/ingestion/status")
 async def ingestion_status():
-    return {"firms":{"status":"ready" if os.environ.get("FIRMS_API_KEY") else "configuration_required","source":firms_pipeline.FIRMS_SOURCE,"last_run":None,"records":await db.anomalies.count_documents({})},"osm":{"status":"ready" if requests else "unavailable","last_run":None,"records":await db.facilities.count_documents({"is_demo":False})},"satellite":{"status":"unavailable","message":"Configure a public imagery provider to enable retrieval"},"land_cover":{"status":"unavailable","message":"Configure a public raster/data path to enable land-cover evidence"},"data_mode":"DEMO DATA"}
+    return {"firms":{"status":"ready" if os.environ.get("FIRMS_API_KEY") else "configuration_required","source":firms_pipeline.FIRMS_SOURCE,"last_attempt":firms_scheduler.INGESTION_STATE.get("last_attempt"),"last_run":firms_scheduler.INGESTION_STATE.get("last_success"),"last_error":firms_scheduler.INGESTION_STATE.get("last_error"),"records":await db.anomalies.count_documents({})},"osm":{"status":"ready" if requests else "unavailable","last_run":None,"records":await db.facilities.count_documents({"is_demo":False})},"satellite":{"status":"unavailable","message":"Configure a public imagery provider to enable retrieval"},"land_cover":{"status":"unavailable","message":"Configure a public raster/data path to enable land-cover evidence"},"data_mode":"DEMO DATA"}
 
 @api.post("/ingestion/firms")
 async def ingest_firms(region: str="all-india", days: int=1):
@@ -216,7 +218,7 @@ async def ingest_firms(region: str="all-india", days: int=1):
     if requests is None: raise HTTPException(503,"Requests dependency unavailable")
     scope=REGIONS.get(region,REGIONS["all-india"])
     try:
-        return await firms_pipeline.run_firms_ingestion(db, key, scope["bbox"], scope["label"], days=max(1,min(days,10)))
+        return await firms_scheduler.perform_firms_ingestion(db, scope["bbox"], scope["label"], days=max(1,min(days,10)))
     except Exception as exc:
         detail=str(exc).replace(key,"***")
         logger.error("FIRMS ingestion failed: %s", detail)
@@ -251,4 +253,5 @@ app.add_middleware(CORSMiddleware,allow_credentials=True,allow_origins=os.enviro
 
 @app.on_event("shutdown")
 async def shutdown():
+    await firms_scheduler.stop()
     client.close()
