@@ -14,7 +14,7 @@ try:
 except ImportError:
     requests = None
 
-from services import model_inference
+from services import model_inference, feature_engineering, firms_pipeline, osm_facilities
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -28,7 +28,10 @@ app = FastAPI(title="ThermoIntel API", version="0.1.0")
 api = APIRouter(prefix="/api")
 
 REGIONS = {
-    "all-india": {"label": "All India", "bbox": [68.1, 6.5, 97.4, 35.7]},
+    # Matches INDIA_BBOX from ThermoIntel_ML_ETL_Colab_IndiaWide.ipynb (west, south, east, north).
+    # This is the actual FIRMS/feature-engineering/facility operating envelope, not an exact
+    # political boundary — coordinates outside India within this rectangle are expected.
+    "all-india": {"label": "All India", "bbox": [68.0, 6.0, 98.0, 38.0]},
     "gujarat": {"label": "Gujarat", "bbox": [68.1, 20.0, 74.5, 24.7]},
     "maharashtra": {"label": "Maharashtra", "bbox": [72.5, 15.6, 80.2, 22.1]},
     "odisha": {"label": "Odisha", "bbox": [81.3, 17.8, 87.6, 22.6]},
@@ -54,6 +57,19 @@ def haversine(a_lat, a_lon, b_lat, b_lon):
 
 def in_bbox(lat, lon, bbox):
     return bbox[1] <= lat <= bbox[3] and bbox[0] <= lon <= bbox[2]
+
+def data_mode_label(docs):
+    """Real ThermoIntel detections (is_demo=False) can now coexist with DEMO
+    DATA fixtures in the same collection — report which is actually present
+    instead of always claiming DEMO DATA."""
+    if not docs:
+        return "DEMO DATA"
+    demo_count = sum(1 for d in docs if d.get("is_demo", True))
+    if demo_count == len(docs):
+        return "DEMO DATA"
+    if demo_count == 0:
+        return "REAL DATA · NASA FIRMS"
+    return "MIXED · DEMO + REAL DATA"
 
 def score_event(frp, confidence, distance_km, persistence, z_score, predicted_class):
     intensity = min(30, frp / 10)
@@ -114,6 +130,10 @@ async def startup():
         await seed_demo()
     except Exception as exc:
         logger.warning("Demo seed unavailable: %s", exc)
+    try:
+        await firms_pipeline.ensure_indexes(db)
+    except Exception as exc:
+        logger.warning("Index setup skipped: %s", exc)
 
 @api.get("/")
 async def root():
@@ -129,7 +149,7 @@ async def summary(region: str = "all-india"):
     docs = await db.anomalies.find({}, {"_id":0}).to_list(5000)
     docs = [d for d in docs if in_bbox(d.get("latitude",0), d.get("longitude",0), bbox)]
     facs = await db.facilities.count_documents({})
-    return {"total_anomalies":len(docs),"industrial_classified":sum(d.get("predicted_class","") in CLASSES[:3] for d in docs),"persistent_sources":sum(d.get("persistence_score",0)>=.5 for d in docs),"abnormal_events":sum(d.get("anomaly_status") in ["High","Anomalous"] for d in docs),"high_priority":sum(d.get("priority_score",0)>=80 for d in docs),"facilities_monitored":facs,"last_update":max([d.get("acquisition_datetime","") for d in docs],default=None),"data_mode":"DEMO DATA","scope":REGIONS.get(region,REGIONS["all-india"])["label"]}
+    return {"total_anomalies":len(docs),"industrial_classified":sum(d.get("predicted_class","") in CLASSES[:3] for d in docs),"persistent_sources":sum(d.get("persistence_score",0)>=.5 for d in docs),"abnormal_events":sum(d.get("anomaly_status") in ["High","Anomalous"] for d in docs),"high_priority":sum(d.get("priority_score",0)>=80 for d in docs),"facilities_monitored":facs,"last_update":max([d.get("acquisition_datetime","") for d in docs],default=None),"data_mode":data_mode_label(docs),"scope":REGIONS.get(region,REGIONS["all-india"])["label"]}
 
 @api.get("/anomalies")
 async def anomalies(region: str="all-india", classification: Optional[str]=None, status: Optional[str]=None, min_priority: int=0, limit: int=100):
@@ -138,7 +158,7 @@ async def anomalies(region: str="all-india", classification: Optional[str]=None,
     docs=[d for d in docs if in_bbox(d.get("latitude",0),d.get("longitude",0),bbox)]
     if classification: docs=[d for d in docs if d.get("predicted_class")==classification]
     if status: docs=[d for d in docs if d.get("anomaly_status")==status]
-    return {"items":[{**d,"type":"Feature","geometry":{"type":"Point","coordinates":[d["longitude"],d["latitude"]]},"properties":d} for d in docs if d.get("priority_score",0)>=min_priority][:limit],"count":len(docs),"data_mode":"DEMO DATA"}
+    return {"items":[{**d,"type":"Feature","geometry":{"type":"Point","coordinates":[d["longitude"],d["latitude"]]},"properties":d} for d in docs if d.get("priority_score",0)>=min_priority][:limit],"count":len(docs),"data_mode":data_mode_label(docs)}
 
 @api.get("/anomalies/{anomaly_id}")
 async def anomaly(anomaly_id: str):
@@ -151,7 +171,8 @@ async def anomaly(anomaly_id: str):
 async def facilities(region: str="all-india"):
     bbox=REGIONS.get(region,REGIONS["all-india"])["bbox"]
     docs=await db.facilities.find({}, {"_id":0}).to_list(5000)
-    return {"items":[d for d in docs if in_bbox(d.get("latitude",0),d.get("longitude",0),bbox)],"data_mode":"DEMO DATA"}
+    scoped=[d for d in docs if in_bbox(d.get("latitude",0),d.get("longitude",0),bbox)]
+    return {"items":scoped,"data_mode":data_mode_label(scoped)}
 
 @api.get("/hotspots")
 async def hotspots(region: str="all-india"):
@@ -161,7 +182,7 @@ async def hotspots(region: str="all-india"):
 @api.get("/alerts")
 async def alerts(region: str="all-india"):
     docs=await anomalies(region,limit=100)
-    return {"items":[{"id":"alert-"+d["id"],"time":d["acquisition_datetime"],"location":f"{d['latitude']:.2f}°N, {d['longitude']:.2f}°E","reason":"Potential abnormal industrial thermal activity" if d["anomaly_status"]=="High" else "Persistent thermal source detected","priority":d["priority_score"],"status":"Open","anomaly_id":d["id"]} for d in docs["items"] if d.get("priority_score",0)>=60],"data_mode":"DEMO DATA"}
+    return {"items":[{"id":"alert-"+d["id"],"time":d["acquisition_datetime"],"location":f"{d['latitude']:.2f}°N, {d['longitude']:.2f}°E","reason":"Potential abnormal industrial thermal activity" if d["anomaly_status"]=="High" else "Persistent thermal source detected","priority":d["priority_score"],"status":"Open","anomaly_id":d["id"]} for d in docs["items"] if d.get("priority_score",0)>=60],"data_mode":docs["data_mode"]}
 
 @api.get("/model/status")
 async def model_status():
@@ -186,29 +207,30 @@ async def ml_classify(req: MLClassifyRequest):
 
 @api.get("/ingestion/status")
 async def ingestion_status():
-    return {"firms":{"status":"ready" if os.environ.get("FIRMS_API_KEY") else "configuration_required","last_run":None,"records":await db.anomalies.count_documents({})},"osm":{"status":"demo_context","last_run":None,"records":await db.facilities.count_documents({})},"satellite":{"status":"unavailable","message":"Configure a public imagery provider to enable retrieval"},"land_cover":{"status":"unavailable","message":"Configure a public raster/data path to enable land-cover evidence"},"data_mode":"DEMO DATA"}
+    return {"firms":{"status":"ready" if os.environ.get("FIRMS_API_KEY") else "configuration_required","source":firms_pipeline.FIRMS_SOURCE,"last_run":None,"records":await db.anomalies.count_documents({})},"osm":{"status":"ready" if requests else "unavailable","last_run":None,"records":await db.facilities.count_documents({"is_demo":False})},"satellite":{"status":"unavailable","message":"Configure a public imagery provider to enable retrieval"},"land_cover":{"status":"unavailable","message":"Configure a public raster/data path to enable land-cover evidence"},"data_mode":"DEMO DATA"}
 
 @api.post("/ingestion/firms")
 async def ingest_firms(region: str="all-india", days: int=1):
     key=os.environ.get("FIRMS_API_KEY")
     if not key: raise HTTPException(503,"FIRMS_API_KEY is not configured; demo data remains available.")
     if requests is None: raise HTTPException(503,"Requests dependency unavailable")
-    bbox=REGIONS.get(region,REGIONS["all-india"])["bbox"]
-    url=f"https://firms.modaps.eosdis.nasa.gov/api/area/csv/{key}/VIIRS_SNPP_NRT/{','.join(map(str,bbox))}/{max(1,min(days,10))}"
+    scope=REGIONS.get(region,REGIONS["all-india"])
     try:
-        response=requests.get(url,timeout=30); response.raise_for_status()
-        rows=list(csv.DictReader(io.StringIO(response.text))); valid=[]
-        for row in rows:
-            try:
-                lat,lon=float(row["latitude"]),float(row["longitude"])
-                if not in_bbox(lat,lon,bbox): continue
-                valid.append({"id":"firms-"+str(uuid.uuid5(uuid.NAMESPACE_URL, json.dumps(row,sort_keys=True))),"latitude":lat,"longitude":lon,"acquisition_datetime":row.get("acq_date","")+"T"+row.get("acq_time","0000").zfill(4)+"00+00:00","satellite":row.get("satellite"),"instrument":row.get("instrument"),"confidence":float(row.get("confidence",0) or 0),"frp":float(row.get("frp",0) or 0),"daynight":row.get("daynight"),"source":"NASA FIRMS","is_demo":False})
-            except (ValueError,KeyError): continue
-        if valid: await db.anomalies.insert_many(valid,ordered=False)
-        return {"status":"complete","inserted":len(valid),"source":"NASA FIRMS","region":REGIONS.get(region,REGIONS["all-india"])["label"]}
+        return await firms_pipeline.run_firms_ingestion(db, key, scope["bbox"], scope["label"], days=max(1,min(days,10)))
     except Exception as exc:
-        logger.exception("FIRMS ingestion failed")
-        raise HTTPException(502,f"FIRMS ingestion unavailable: {exc}")
+        detail=str(exc).replace(key,"***")
+        logger.error("FIRMS ingestion failed: %s", detail)
+        raise HTTPException(502,f"FIRMS ingestion unavailable: {detail}")
+
+@api.post("/ingestion/osm")
+async def ingest_osm(region: str="all-india"):
+    if requests is None: raise HTTPException(503,"Requests dependency unavailable")
+    scope=REGIONS.get(region,REGIONS["all-india"])
+    try:
+        return await osm_facilities.run_osm_ingestion(db, scope["bbox"])
+    except Exception as exc:
+        logger.exception("OSM ingestion failed")
+        raise HTTPException(502,f"OSM ingestion unavailable: {exc}")
 
 @api.post("/analyst")
 async def analyst(req: AnalystRequest):
