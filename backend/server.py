@@ -14,6 +14,8 @@ try:
 except ImportError:
     requests = None
 
+from services import model_inference
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 mongo_url = os.environ["MONGO_URL"]
@@ -36,6 +38,9 @@ CLASSES = ["Industrial Fire", "Persistent Industrial Thermal Source", "Gas Flare
 class AnalystRequest(BaseModel):
     question: str = Field(min_length=3, max_length=800)
     region: str = "all-india"
+
+class MLClassifyRequest(BaseModel):
+    features: dict = Field(description="Feature dict keyed by the names in /api/ml/schema")
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
@@ -160,7 +165,24 @@ async def alerts(region: str="all-india"):
 
 @api.get("/model/status")
 async def model_status():
-    return {"available":False,"version":"baseline-rules-v0.1","metrics_available":False,"message":"Model evaluation unavailable — training dataset requires validation.","classes":CLASSES,"training_pipeline":"/app/ml/training/train_classifier.py"}
+    availability = model_inference.models_available()
+    return {"available":False,"version":"baseline-rules-v0.1","metrics_available":False,"message":"Model evaluation unavailable — training dataset requires validation.","classes":CLASSES,"training_pipeline":"/app/ml/training/train_classifier.py","trained_models":{"model1_agricultural_vs_industrial":availability["model1_loaded"],"model2_persistent_vs_industrial_fire":availability["model2_loaded"],"metrics_validated":False,"disclaimer":model_inference.DISCLAIMER}}
+
+@api.get("/ml/schema")
+async def ml_schema():
+    return model_inference.get_feature_schema()
+
+@api.post("/ml/classify")
+async def ml_classify(req: MLClassifyRequest):
+    availability = model_inference.models_available()
+    if not availability["model1_loaded"]:
+        raise HTTPException(503, "Trained model artifacts are not available on this deployment.")
+    try:
+        result = model_inference.run_inference(req.features)
+    except Exception as exc:
+        logger.exception("ML inference failed")
+        raise HTTPException(500, f"Inference failed: {exc}")
+    return result
 
 @api.get("/ingestion/status")
 async def ingestion_status():
