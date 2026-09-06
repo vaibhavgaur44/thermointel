@@ -11,6 +11,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
+import numpy as np
+
 from services import model_inference as mi
 
 MODEL1_FEATURES = [
@@ -100,6 +102,22 @@ def test_missing_and_non_finite_values_do_not_crash_inference():
     assert result["model1_class"] in ("agricultural", "industrial")
     assert isinstance(result["model1_probability"], float)
     assert not math.isnan(result["model1_probability"])
+
+
+def test_missing_and_non_finite_values_are_filled_with_zero_before_predict():
+    partial = {
+        "frp": 200, "confidence_num": None, "nearest_facility_km": float("inf"),
+        "detections_30d": float("-inf"), "baseline_z_score": "not-a-number",
+    }
+    vector = mi._build_feature_vector(partial, MODEL1_FEATURES)
+    assert not np.isnan(vector).any()
+    assert not np.isinf(vector).any()
+    idx = {name: i for i, name in enumerate(MODEL1_FEATURES)}
+    assert vector[0, idx["confidence_num"]] == 0.0
+    assert vector[0, idx["nearest_facility_km"]] == 0.0
+    assert vector[0, idx["detections_30d"]] == 0.0
+    assert vector[0, idx["baseline_z_score"]] == 0.0
+    assert vector[0, idx["frp"]] == 200.0
 
 
 def test_empty_observation_does_not_crash_inference():

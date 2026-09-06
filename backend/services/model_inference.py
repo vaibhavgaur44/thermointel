@@ -70,22 +70,25 @@ def get_feature_schema() -> dict:
 
 
 def _to_safe_float(value) -> float:
-    """Convert any input to a finite float, or NaN for missing/invalid values.
-    XGBoost natively handles NaN as a missing value during split evaluation."""
+    """Convert any input to a finite float, or NaN for missing/invalid/non-finite values.
+    Mirrors the training-time preprocessing: numeric conversion, then inf/-inf -> NaN."""
     if value is None:
         return float("nan")
     try:
         f = float(value)
     except (TypeError, ValueError):
         return float("nan")
-    if math.isnan(f) or math.isinf(f):
+    if math.isinf(f):
         return float("nan")
     return f
 
 
 def _build_feature_vector(observation: dict, feature_names: list) -> np.ndarray:
+    """Builds the model input row, then replaces any NaN (missing/non-finite) with
+    0.0 to match the training-time preprocessing used when fitting these artifacts."""
     values = [_to_safe_float(observation.get(name)) for name in feature_names]
-    return np.array(values, dtype=float).reshape(1, -1)
+    vector = np.array(values, dtype=float).reshape(1, -1)
+    return np.nan_to_num(vector, nan=0.0, posinf=0.0, neginf=0.0)
 
 
 def _resolve_class_names(artifact: dict, fallback_negative: str) -> list:

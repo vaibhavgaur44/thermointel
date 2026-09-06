@@ -1,0 +1,23 @@
+{
+  "summary": "Milestone 1 backend-only testing: validated /api/ml/classify NaN/inf preprocessing bug fix, /api/ml/schema feature order, /api/model/status trained_models block, and regressed unrelated read/status endpoints. All 18 tests pass (11 unit + 7 API/regression).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_ml_classify_api.py",
+    "/app/backend/tests/test_model_inference.py",
+    "/app/test_reports/pytest/ml_milestone1.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "model_inference.py loads artifacts at module import time - if joblib load fails silently, run_inference will raise 500 at request time. Consider surfacing load failure in /api/model/status.trained_models for observability.",
+    "_resolve_class_names assumes classes_ order maps [negative, positive] to [0,1] without verifying against artifact['model'].classes_; if a future retrain flips class order, labels silently invert. Add an assertion against model.classes_.",
+    "POST /api/ml/classify does not appear to enforce a Pydantic body model for 'features'; non-dict payloads should be validated with a 422 rather than potentially reaching internal code."
+  ],
+  "updated_files": ["/app/backend/tests/test_ml_classify_api.py"],
+  "success_rate": {"backend": "100%", "frontend": "not-tested"},
+  "seed_data_creation": "None. Payloads constructed in-test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Milestone 1 (two-stage XGBoost inference) is green end-to-end. Bug fix (np.nan_to_num on the feature vector) is verified by both the internal _build_feature_vector unit assertion and by POST /api/ml/classify with null/inf/'not-a-number' payloads (200 OK, real float probability, no NaN). Regression on /api/, /api/dashboard/summary, /api/anomalies(+detail), /api/facilities, /api/hotspots, /api/alerts, /api/ingestion/status, and POST /api/ingestion/firms (503 by design) all pass. FIRMS live ingestion / feature engineering / frontend wiring are still out of scope.",
+  "rca of the issue": "Prior bug: _build_feature_vector left NaN in the input to XGBoost. Even though XGBoost tolerates NaN, training used fillna(0.0) on inf-converted-to-NaN, so inference-time NaN feature values yielded a distribution shift and could bias probabilities. Fix applies np.nan_to_num(vector, nan=0.0, posinf=0.0, neginf=0.0) after _to_safe_float converts inf/-inf/None/non-numeric strings to NaN, exactly matching training preprocessing. Verified by unit test asserting no NaN/inf remains in the built vector and by API-level tests confirming missing/null/non-numeric features return valid finite probabilities."
+}
