@@ -158,6 +158,38 @@ async def process_observation(db, raw_observation: dict) -> dict:
         prediction_confidence = result.get("model1_probability")
     if prediction_confidence is None:
         prediction_confidence = 0.5
+    prediction_confidence = result.get("model2_probability")
+
+    if prediction_confidence is None:
+        prediction_confidence = result.get("model1_probability")
+
+    if prediction_confidence is None:
+        prediction_confidence = 0.5
+
+    persistence_score = min(
+        1.0,
+        features.get("days_active_30d", 0) / 30.0
+    )
+
+    z_score = features.get("baseline_z_score", 0.0)
+
+    anomaly_status = (
+        "High" if z_score >= 2.2
+        else "Anomalous" if z_score >= 1.5
+        else "Normal"
+    )
+
+    priority_score = round(min(
+        100,
+        min(30, raw_observation["frp"] / 10)
+        + min(20, max(0, 20 - features.get("nearest_facility_km", 20) * 1.5))
+        + min(20, max(0, z_score * 6))
+        + min(15, persistence_score * 15)
+        + (15 if result["final_class"] == "industrial_fire" else 7)
+        + prediction_confidence * 0.15
+    ))
+
+    
 
     return {
         "id": raw_observation["observation_id"],
@@ -186,6 +218,9 @@ async def process_observation(db, raw_observation: dict) -> dict:
         "final_class": result["final_class"],
         "predicted_class": result["final_class"],
         "prediction_confidence": prediction_confidence,
+        "persistence_score": persistence_score,
+        "anomaly_status": anomaly_status,
+        "priority_score": priority_score,
         "evidence": [
             f"Model 1 (agricultural/industrial): {result['model1_class']} ({result['model1_probability']:.2f})" if result["model1_probability"] is not None else "Model 1 unavailable",
             f"Model 2 (persistent source/industrial fire): {result['model2_class']}" + (f" ({result['model2_probability']:.2f})" if result.get("model2_probability") is not None else ""),

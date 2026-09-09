@@ -148,15 +148,32 @@ async def regions():
 @api.get("/dashboard/summary")
 async def summary(region: str = "all-india"):
     bbox = REGIONS.get(region, REGIONS["all-india"])["bbox"]
-    docs = await db.anomalies.find({}, {"_id":0}).to_list(5000)
+    docs = await db.anomalies.find(
+    {"source": {"$ne": "NASA FIRMS · historical"}},
+    {"_id": 0}
+).to_list(5000)
     docs = [d for d in docs if in_bbox(d.get("latitude",0), d.get("longitude",0), bbox)]
     facs = await db.facilities.count_documents({})
-    return {"total_anomalies":len(docs),"industrial_classified":sum(d.get("predicted_class","") in CLASSES[:3] for d in docs),"persistent_sources":sum(d.get("persistence_score",0)>=.5 for d in docs),"abnormal_events":sum(d.get("anomaly_status") in ["High","Anomalous"] for d in docs),"high_priority":sum(d.get("priority_score",0)>=80 for d in docs),"facilities_monitored":facs,"last_update":max([d.get("acquisition_datetime","") for d in docs],default=None),"data_mode":data_mode_label(docs),"scope":REGIONS.get(region,REGIONS["all-india"])["label"]}
+    return {"total_anomalies":len(docs),"industrial_classified":sum(d.get("predicted_class") in ["industrial", "persistent_source", "industrial_fire"] for d in docs),"persistent_sources":sum(d.get("predicted_class")=="persistent_source" for d in docs),"abnormal_events":sum(d.get("anomaly_status") in ["High","Anomalous"] for d in docs),"high_priority":sum(d.get("priority_score",0)>=80 for d in docs),"facilities_monitored":facs,"last_update": max(
+    [
+        d.get("acquisition_datetime")
+        if hasattr(d.get("acquisition_datetime"), "year")
+        else datetime.fromisoformat(
+            str(d.get("acquisition_datetime")).replace("Z", "+00:00")
+        )
+        for d in docs
+        if d.get("acquisition_datetime")
+    ],
+    default=None,
+),"data_mode":data_mode_label(docs),"scope":REGIONS.get(region,REGIONS["all-india"])["label"]}
 
 @api.get("/anomalies")
-async def anomalies(region: str="all-india", classification: Optional[str]=None, status: Optional[str]=None, min_priority: int=0, limit: int=100):
+async def anomalies(region: str="all-india", classification: Optional[str]=None, status: Optional[str]=None, min_priority: int=0, limit: int=5000):
     bbox=REGIONS.get(region,REGIONS["all-india"])["bbox"]
-    docs=await db.anomalies.find({}, {"_id":0}).sort("priority_score",-1).to_list(5000)
+    docs=await db.anomalies.find(
+    {"source": {"$ne": "NASA FIRMS · historical"}},
+    {"_id":0}
+).sort("priority_score",-1).to_list(5000)
     docs=[d for d in docs if in_bbox(d.get("latitude",0),d.get("longitude",0),bbox)]
     if classification: docs=[d for d in docs if d.get("predicted_class")==classification]
     if status: docs=[d for d in docs if d.get("anomaly_status")==status]
@@ -234,6 +251,69 @@ async def ingest_osm(region: str="all-india"):
         logger.exception("OSM ingestion failed")
         raise HTTPException(502,f"OSM ingestion unavailable: {exc}")
 
+@api.post("/ingestion/reprocess")
+async def reprocess_anomalies(region: str = "all-india"):
+    bbox = REGIONS.get(region, REGIONS["all-india"])["bbox"]
+
+    docs = await db.anomalies.find(
+    {
+        "is_demo": False,
+        "source": {"$ne": "NASA FIRMS · historical"}
+    },
+    {"_id": 0}
+    ).to_list(5000)
+
+    docs = [
+        d for d in docs
+        if in_bbox(d.get("latitude", 0), d.get("longitude", 0), bbox)
+    ]
+
+    updated = 0
+    errors = 0
+
+    for doc in docs:
+        try:
+            raw = {
+                "observation_id": doc["observation_id"],
+                "latitude": doc["latitude"],
+                "longitude": doc["longitude"],
+                "acquisition_datetime": doc["acquisition_datetime"],
+                "acq_date": doc["acq_date"],
+                "acq_time": doc["acq_time"],
+                "frp": doc["frp"],
+                "confidence_raw": doc.get("confidence"),
+                "confidence_num": doc.get("confidence_num", 0.5),
+                "bright_ti4": doc.get("bright_ti4"),
+                "bright_ti5": doc.get("bright_ti5"),
+                "satellite": doc.get("satellite"),
+                "instrument": doc.get("instrument"),
+                "daynight": doc.get("daynight"),
+            }
+
+            processed = await firms_pipeline.process_observation(db, raw)
+
+            await db.anomalies.update_one(
+                {"observation_id": doc["observation_id"]},
+                {"$set": processed}
+            )
+
+            updated += 1
+
+        except Exception:
+            logger.exception(
+                "Failed to reprocess observation %s",
+                doc.get("observation_id")
+            )
+            errors += 1
+
+    return {
+        "status": "complete",
+        "processed": len(docs),
+        "updated": updated,
+        "errors": errors,
+        "facilities_used": await db.facilities.count_documents({"is_demo": False}),
+    }
+
 @api.post("/analyst")
 async def analyst(req: AnalystRequest):
     key=os.environ.get("EMERGENT_LLM_KEY")
@@ -249,8 +329,16 @@ async def analyst(req: AnalystRequest):
     return {"answer":"".join(answer),"data_mode":"DEMO DATA","scope":REGIONS.get(req.region,REGIONS["all-india"])["label"]}
 
 app.include_router(api)
-app.add_middleware(CORSMiddleware,allow_credentials=True,allow_origins=os.environ.get("CORS_ORIGINS","*").split(","),allow_methods=["*"],allow_headers=["*"])
-
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 @app.on_event("shutdown")
 async def shutdown():
     await firms_scheduler.stop()
