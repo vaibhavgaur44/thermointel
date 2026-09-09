@@ -314,19 +314,6 @@ async def reprocess_anomalies(region: str = "all-india"):
         "facilities_used": await db.facilities.count_documents({"is_demo": False}),
     }
 
-@api.post("/analyst")
-async def analyst(req: AnalystRequest):
-    key=os.environ.get("EMERGENT_LLM_KEY")
-    if not key: raise HTTPException(503,"Analyst unavailable: EMERGENT_LLM_KEY is not configured.")
-    from emergentintegrations.llm.chat import LlmChat, UserMessage, TextDelta, ToolCallReady, StreamDone
-    docs=(await anomalies(req.region,limit=100))["items"]
-    context=json.dumps([{k:d.get(k) for k in ["id","predicted_class","prediction_confidence","priority_score","anomaly_status","frp","latitude","longitude","nearest_facility","persistence_score","detections_30d"]} for d in docs])
-    chat=LlmChat(api_key=key,session_id="thermointel-"+str(uuid.uuid4()),system_message="You are ThermoIntel Analyst. Answer only from the supplied structured data. Never invent observations. Clearly distinguish detection, predicted classification, anomaly status, and system priority score. Mention DEMO DATA when present. Be concise and operational.").with_model("openai","gpt-5.4")
-    answer=[]
-    async for ev in chat.stream_message(UserMessage(text=f"User question: {req.question}\nRegion: {REGIONS.get(req.region,REGIONS['all-india'])['label']}\nStructured ThermoIntel data: {context}")):
-        if isinstance(ev,TextDelta): answer.append(ev.content)
-        if isinstance(ev,StreamDone): break
-    return {"answer":"".join(answer),"data_mode":"DEMO DATA","scope":REGIONS.get(req.region,REGIONS["all-india"])["label"]}
 
 app.include_router(api)
 app.add_middleware(
