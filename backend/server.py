@@ -319,8 +319,9 @@ app.include_router(api)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "https://sih-thermointel-1.onrender.com",
     ],
     allow_credentials=True,
     allow_methods=["*"],
