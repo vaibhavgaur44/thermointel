@@ -1,0 +1,39 @@
+{
+  "summary": "Comprehensive backend+frontend test of ThermoIntel v2 Phase 2. 34/35 backend pytest cases pass. Full UI flow verified: honest empty states, DEMO DATA toggle+banner, priority ordering by threat, event selection with intelligence panel (Steel/Metal, CRITICAL 92.4, 87% confidence, 4 evidence items, dashed selection ring), region filter (Odisha), all classification/source-type/time-range/reset filters, NO confidence filter, view-mode live/historical, basemap switching, pipeline 'Not configured' popover, zero console errors. Only real defect: MongoDB _id leaks in /api/ingestion/status.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/ingestion/status", "issue": "MongoDB _id (ObjectId hex) leaks in latest_run and recent_runs payloads. Should be excluded per project rule (mongo _id not JSON-friendly / not part of contract)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_thermointel_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Exclude MongoDB `_id` from IngestionRun serialization in /api/ingestion/status (latest_run and recent_runs). Fix likely in /app/backend/api/routes/ingestion.py or the Pydantic response model."
+  ],
+  "critical_code_review_comments": [
+    "Ingestion status endpoint leaks raw Mongo _id in latest_run and recent_runs. Add response_model or projection {'_id': 0}.",
+    "Priority events endpoint correctly sorts by threat.threat_score desc and picks demo-evt-001 (92.4) first — confirmed.",
+    "Demo data isolation via include_demo flag is correctly enforced server-side (default GET /api/events returns 0 even after seed).",
+    "No fabricated confidence detected: multiple demo events (demo-evt-004/013/014) return model_confidence=null; no event has confidence >= 1.0.",
+    "Frontend correctly renders honest empty states, and 'model version = demo-placeholder-not-a-real-model' is exposed — good honesty signal.",
+    "No confidence filter parameter or UI control exists (verified both server-side no-op and UI absence)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_thermointel_backend.py (new)"
+  ],
+  "success_rate": {"backend": "97% (34/35)", "frontend": "100%"},
+  "test_credentials": "N/A - no auth in Phase 2",
+  "seed_data_creation": "Used built-in POST /api/dev/demo-data/seed (18 events, 4 alerts, 5 facilities). Cleared at end of test suite.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest lives in /app/backend/tests/test_thermointel_backend.py — everything is in a single TestThermoIntelPhase2 class to avoid xdist loadscope races (pytest.ini forces -n 2). Run: `pytest /app/backend/tests/test_thermointel_backend.py -v`. Only failing test is test_33_ingestion_no_objectid_leak. Frontend flows all pass with force=True clicks. Cesium needs ~8-10s to initialise before assertions.",
+  "rca of the issue": "In /api/ingestion/status the IngestionRun documents are returned directly from MongoDB with the raw '_id' ObjectId (stringified) still present. Response payload example: latest_run['_id'] = '6aa8f714fe2c1bce99a4df17'. Reproduction: `curl $API/ingestion/status | jq .latest_run._id` returns a value. Fix: either add a Pydantic response_model that omits _id, use projection {'_id': 0} in the Mongo find/find_one, or explicitly `doc.pop('_id', None)` before returning."
+}
