@@ -1,6 +1,7 @@
 import { AlertOctagon } from "lucide-react";
 
 import { GlobeCanvas } from "@/components/map/GlobeCanvas";
+import { Map2D } from "@/components/map/Map2D";
 import { FilterBar } from "@/components/layout/FilterBar";
 import { TopBar } from "@/components/layout/TopBar";
 import { AlertQueuePanel } from "@/components/panels/AlertQueuePanel";
@@ -20,11 +21,11 @@ const DemoBanner = () => (
 );
 
 export default function Dashboard() {
-  const { demoMode, selectedEventId } = useDashboard();
+  const { demoMode, selectedEventId, mapMode } = useDashboard();
 
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#04060c]">
-      <GlobeCanvas />
+      {mapMode === "2D" ? <Map2D /> : <GlobeCanvas />}
 
       <div className="pointer-events-none absolute inset-0 z-10 flex flex-col">
         {demoMode && <DemoBanner />}

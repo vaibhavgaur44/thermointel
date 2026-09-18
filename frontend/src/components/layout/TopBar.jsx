@@ -1,8 +1,4 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, Database, Globe2, Layers, Radio } from "lucide-react";
-import { toast } from "sonner";
-
-import { thermoIntelApi } from "@/api/thermointel";
+import { Activity, Globe2, Layers, Radio } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -148,45 +144,30 @@ const PipelineStatus = () => {
   );
 };
 
-const DemoDataToggle = () => {
-  const { demoMode, setDemoMode } = useDashboard();
-  const queryClient = useQueryClient();
-
-  const mutation = useMutation({
-    mutationFn: async (enable) => {
-      if (enable) {
-        const status = await thermoIntelApi.demoDataStatus();
-        if (!status.counts?.events) await thermoIntelApi.seedDemoData();
-      }
-      return enable;
-    },
-    onSuccess: (enable) => {
-      setDemoMode(enable);
-      queryClient.invalidateQueries();
-      toast[enable ? "warning" : "success"](
-        enable
-          ? "DEMO DATA enabled - development values only"
-          : "DEMO DATA disabled",
-      );
-    },
-    onError: (error) => toast.error(error.message),
-  });
+const MapModeToggle = () => {
+  const { mapMode, setMapMode } = useDashboard();
 
   return (
-    <button
-      type="button"
-      data-testid="demo-data-toggle"
-      onClick={() => mutation.mutate(!demoMode)}
-      disabled={mutation.isPending}
-      className={`${PILL} border ${
-        demoMode
-          ? "border-amber-400/60 bg-amber-400/15 text-amber-300"
-          : "border-slate-700/60 text-slate-400 hover:bg-slate-700/40"
-      }`}
+    <div
+      className="flex items-center overflow-hidden rounded-sm border border-slate-700/60"
+      data-testid="map-mode-toggle"
     >
-      <Database className="h-3 w-3" />
-      Demo data
-    </button>
+      {["2D", "3D"].map((mode) => (
+        <button
+          key={mode}
+          type="button"
+          data-testid={`map-mode-${mode.toLowerCase()}`}
+          onClick={() => setMapMode(mode)}
+          className={`${PILL} ${
+            mapMode === mode
+              ? "bg-sky-400/15 text-sky-300"
+              : "text-slate-400 hover:bg-slate-700/40 hover:text-slate-200"
+          }`}
+        >
+          {mode}
+        </button>
+      ))}
+    </div>
   );
 };
 
@@ -213,7 +194,7 @@ export const TopBar = () => (
       <ViewModeToggle />
       <PipelineStatus />
       <BasemapSelector />
-      <DemoDataToggle />
+      <MapModeToggle />
     </div>
   </header>
 );

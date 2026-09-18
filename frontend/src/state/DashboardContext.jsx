@@ -17,6 +17,7 @@ export const DashboardProvider = ({ children }) => {
   const [selectedEventId, setSelectedEventId] = useState(null);
   const [demoMode, setDemoMode] = useState(false);
   const [basemap, setBasemap] = useState("dark");
+  const [mapMode, setMapMode] = useState("2D");
   const [cameraTarget, setCameraTarget] = useState(null);
 
   const setRegion = useCallback((region) => {
@@ -76,43 +77,45 @@ export const DashboardProvider = ({ children }) => {
   );
 
   const value = useMemo(
-    () => ({
-      filters,
-      queryFilters,
-      selectedEventId,
-      demoMode,
-      basemap,
-      cameraTarget,
-      setRegion,
-      toggleClassification,
-      toggleSourceType,
-      setTimeRange,
-      setViewMode,
-      resetFilters,
-      selectEvent,
-      clearSelection,
-      setDemoMode,
-      setBasemap,
-      setCameraTarget,
-    }),
-    [
-      filters,
-      queryFilters,
-      selectedEventId,
-      demoMode,
-      basemap,
-      cameraTarget,
-      setRegion,
-      toggleClassification,
-      toggleSourceType,
-      setTimeRange,
-      setViewMode,
-      resetFilters,
-      selectEvent,
-      clearSelection,
-    ],
-  );
-
+  () => ({
+    filters,
+    queryFilters,
+    selectedEventId,
+    demoMode,
+    basemap,
+    mapMode,
+    cameraTarget,
+    setRegion,
+    toggleClassification,
+    toggleSourceType,
+    setTimeRange,
+    setViewMode,
+    resetFilters,
+    selectEvent,
+    clearSelection,
+    setDemoMode,
+    setBasemap,
+    setMapMode,
+    setCameraTarget,
+  }),
+  [
+    filters,
+    queryFilters,
+    selectedEventId,
+    demoMode,
+    basemap,
+    mapMode,
+    cameraTarget,
+    setRegion,
+    toggleClassification,
+    toggleSourceType,
+    setTimeRange,
+    setViewMode,
+    resetFilters,
+    selectEvent,
+    clearSelection,
+  ],
+);
   return (
     <DashboardContext.Provider value={value}>
       {children}
