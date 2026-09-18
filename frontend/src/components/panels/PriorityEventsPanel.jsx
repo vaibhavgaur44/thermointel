@@ -39,7 +39,7 @@ const PriorityRow = ({ event, rank, selected, onSelect }) => {
             : "border-l-transparent hover:border-l-slate-600 hover:bg-slate-800/40"
         }`}
       >
-        <span className="mt-0.5 font-mono text-[11px] font-bold tabular-nums text-slate-600">
+        <span className="mt-0.5 font-mono text-[11px] font-bold tabular-nums text-slate-400">
           {String(rank).padStart(2, "0")}
         </span>
         <span className="min-w-0 flex-1">
@@ -56,7 +56,7 @@ const PriorityRow = ({ event, rank, selected, onSelect }) => {
               {source}
             </span>
           )}
-          <span className="mt-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-slate-500">
+          <span className="mt-1 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.14em] text-slate-300">
             <span className="truncate">{event.state || "Unassigned"}</span>
             <span className="text-slate-700">/</span>
             <span>{event.detection_count} det</span>
@@ -64,7 +64,7 @@ const PriorityRow = ({ event, rank, selected, onSelect }) => {
             <span>{relativeTime(event.last_detected)}</span>
           </span>
         </span>
-        <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-600 transition-colors duration-200 group-hover:text-sky-300" />
+        <ChevronRight className="mt-1 h-3.5 w-3.5 shrink-0 text-slate-400 transition-colors duration-200 group-hover:text-sky-300" />
       </button>
     </li>
   );
@@ -81,7 +81,7 @@ export const PriorityEventsPanel = () => {
         eyebrow="Priority Events"
         title={`Top 5 · ${scope}`}
         right={
-          <span className="shrink-0 pt-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-500">
+          <span className="shrink-0 pt-1 font-mono text-[9px] uppercase tracking-[0.18em] text-slate-300">
             by threat score
           </span>
         }

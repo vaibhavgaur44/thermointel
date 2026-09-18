@@ -63,7 +63,7 @@ const BasemapSelector = () => {
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-44 border-slate-700/50 bg-[#070b14]/96 p-1 backdrop-blur-xl"
+        className="w-44 rounded-xl border border-slate-600/40 bg-[#020817]/95 p-1 shadow-2xl"
       >
         {BASEMAPS.map((option) => (
           <button
@@ -79,7 +79,7 @@ const BasemapSelector = () => {
           >
             {option.label}
             {option.value === "satellite" && (
-              <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-slate-600">
+              <span className="font-mono text-[9px] uppercase tracking-[0.12em] text-slate-400">
                 {hasIonToken ? "Ion" : "Esri"}
               </span>
             )}
@@ -113,7 +113,7 @@ const PipelineStatus = () => {
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        className="w-72 border-slate-700/50 bg-[#070b14]/96 p-3 backdrop-blur-xl"
+        className="w-72 border-slate-700/50 bg-[#020817]/95 p-3 backdrop-blur-xl"
       >
         <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.2em] text-sky-300/70">
           Pipeline readiness
@@ -127,7 +127,7 @@ const PipelineStatus = () => {
               <span>{label}</span>
               <span
                 className={`font-mono text-[10px] uppercase tracking-[0.14em] ${
-                  ready ? "text-emerald-400" : "text-slate-500"
+                  ready ? "text-emerald-400" : "text-slate-300"
                 }`}
               >
                 {ready ? "Ready" : "Not configured"}
@@ -135,7 +135,7 @@ const PipelineStatus = () => {
             </li>
           ))}
         </ul>
-        <p className="mt-3 border-t border-slate-800 pt-2 text-[11px] leading-relaxed text-slate-500">
+        <p className="mt-3 border-t border-slate-800 pt-2 text-[11px] leading-relaxed text-slate-300">
           Ingestion, event formation, ML inference and threat scoring are
           delivered in later phases. No values are simulated.
         </p>
@@ -173,7 +173,7 @@ const MapModeToggle = () => {
 
 export const TopBar = () => (
   <header
-    className="pointer-events-auto flex items-center justify-between gap-4 border-b border-slate-800/50 bg-[#050810]/78 px-5 py-2.5 backdrop-blur-xl"
+    className="pointer-events-auto flex items-center justify-between gap-4 border-b border-slate-700/50 bg-[#020817]/80 px-5 py-2.5 backdrop-blur-xl"
     data-testid="top-bar"
   >
     <div className="flex items-center gap-3">
@@ -185,7 +185,7 @@ export const TopBar = () => (
             V2
           </span>
         </p>
-        <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-slate-500">
+        <p className="font-mono text-[9px] uppercase tracking-[0.24em] text-slate-300">
           India thermal-event intelligence
         </p>
       </div>

@@ -64,7 +64,7 @@ export const RegionalOverviewPanel = () => {
         {data && (
           <>
             <div className="flex items-end justify-between border-b border-slate-800/60 pb-3">
-              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-500">
+              <span className="font-mono text-[10px] uppercase tracking-[0.22em] text-slate-300">
                 Total Events
               </span>
               <span
@@ -102,7 +102,7 @@ export const RegionalOverviewPanel = () => {
                 )}
               </ul>
             )}
-            <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-slate-600">
+            <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.16em] text-slate-400">
               Scope · {data.status_scope}
             </p>
           </>

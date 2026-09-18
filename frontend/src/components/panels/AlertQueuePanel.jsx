@@ -66,7 +66,7 @@ export const AlertQueuePanel = () => {
                   <span className="mt-1 block truncate text-[13px] text-slate-200">
                     {alert.primary_reason || "Flagged by threat engine"}
                   </span>
-                  <span className="mt-0.5 block truncate font-mono text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                  <span className="mt-0.5 block truncate font-mono text-[10px] uppercase tracking-[0.14em] text-slate-300">
                     {sourceTypeLabel(alert.source_type) || "—"} ·{" "}
                     {alert.state || "Unassigned"}
                   </span>

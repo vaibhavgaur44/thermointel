@@ -13,7 +13,7 @@ import { useDashboard } from "@/state/DashboardContext";
 
 const Field = ({ label, value, mono = true, testId }) => (
   <div className="flex items-baseline justify-between gap-3 border-b border-slate-800/50 py-1.5 last:border-0">
-    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-500">
+    <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-slate-300">
       {label}
     </span>
     <span
@@ -114,7 +114,7 @@ export const SelectedEventPanel = () => {
                         <span>
                           {item.label}
                           {item.detail && (
-                            <span className="block font-mono text-[10px] text-slate-500">
+                            <span className="block font-mono text-[10px] text-slate-300">
                               {item.detail}
                             </span>
                           )}

@@ -15,7 +15,7 @@ import { useRegions } from "@/hooks/useThermoIntel";
 import { useDashboard } from "@/state/DashboardContext";
 
 const BAR =
-  "pointer-events-auto flex items-center gap-1 rounded-md border border-slate-700/40 bg-[#070b14]/78 px-1.5 py-1.5 backdrop-blur-xl";
+  "pointer-events-auto flex items-center gap-1 rounded-xl border border-slate-600/35 bg-[#020817]/80 px-1.5 py-1.5 backdrop-blur-xl";
 
 const TRIGGER =
   "flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-300 transition-colors duration-200 hover:bg-slate-700/40 hover:text-slate-50";
@@ -30,12 +30,12 @@ const GeographyFilter = () => {
       <PopoverTrigger asChild>
         <button type="button" data-testid="filter-geography-trigger" className={TRIGGER}>
           {filters.region?.name || "India"}
-          <ChevronDown className="h-3 w-3 text-slate-500" />
+          <ChevronDown className="h-3 w-3 text-slate-300" />
         </button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="max-h-80 w-72 overflow-y-auto border-slate-700/50 bg-[#070b14]/96 p-1 backdrop-blur-xl"
+        className="max-h-80 w-72 overflow-y-auto rounded-xl border border-slate-600/40 bg-[#020817]/95 p-1 shadow-2xl"
       >
         <button
           type="button"
@@ -59,7 +59,7 @@ const GeographyFilter = () => {
             }`}
           >
             <span className="truncate">{region.name}</span>
-            <span className="ml-2 shrink-0 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-600">
+            <span className="ml-2 shrink-0 font-mono text-[9px] uppercase tracking-[0.14em] text-slate-400">
               {region.kind === "UNION_TERRITORY" ? "UT" : "ST"}
             </span>
           </button>
@@ -115,12 +115,12 @@ const SourceTypeFilter = () => {
               {count}
             </span>
           )}
-          <ChevronDown className="h-3 w-3 text-slate-500" />
+          <ChevronDown className="h-3 w-3 text-slate-300" />
         </button>
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="max-h-80 w-72 overflow-y-auto border-slate-700/50 bg-[#070b14]/96 p-1 backdrop-blur-xl"
+        className="max-h-80 w-72 overflow-y-auto rounded-xl border border-slate-600/40 bg-[#020817]/95 p-1 shadow-2xl"
       >
         {Object.entries(SOURCE_TYPES).map(([value, label]) => {
           const active = filters.sourceTypes.includes(value);
@@ -180,7 +180,7 @@ export const FilterBar = () => {
   const { resetFilters } = useDashboard();
   return (
     <div className={BAR} data-testid="filter-bar">
-      <Filter className="mx-1.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+      <Filter className="mx-1.5 h-3.5 w-3.5 shrink-0 text-slate-300" />
       <GeographyFilter />
       <span className="h-5 w-px bg-slate-700/60" />
       <ClassificationFilter />
@@ -192,7 +192,7 @@ export const FilterBar = () => {
         type="button"
         data-testid="filter-reset-button"
         onClick={resetFilters}
-        className="ml-1 rounded-sm p-1.5 text-slate-500 transition-colors duration-200 hover:bg-slate-700/40 hover:text-slate-200"
+        className="ml-1 rounded-sm p-1.5 text-slate-300 transition-colors duration-200 hover:bg-slate-700/40 hover:text-slate-200"
         aria-label="Reset filters"
       >
         <RotateCcw className="h-3.5 w-3.5" />

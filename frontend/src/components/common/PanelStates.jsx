@@ -33,11 +33,11 @@ export const EmptyState = ({ title, detail, testId }) => (
     className="rounded border border-dashed border-slate-700/60 px-3 py-6"
   >
     <div className="flex items-center gap-2">
-      <Inbox className="h-3.5 w-3.5 text-slate-500" />
+      <Inbox className="h-3.5 w-3.5 text-slate-300" />
       <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-400">
         {title}
       </p>
     </div>
-    {detail && <p className="mt-2 text-xs leading-relaxed text-slate-500">{detail}</p>}
+    {detail && <p className="mt-2 text-xs leading-relaxed text-slate-300">{detail}</p>}
   </div>
 );

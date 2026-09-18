@@ -5,7 +5,7 @@ export const Panel = ({ className, children, testId }) => (
   <section
     data-testid={testId}
     className={cn(
-      "pointer-events-auto rounded-md border border-slate-700/40 bg-[#070b14]/72 backdrop-blur-xl",
+       "pointer-events-auto rounded-xl border border-slate-600/35 bg-[#020817]/80 backdrop-blur-xl",
       "shadow-[0_18px_50px_-18px_rgba(0,0,0,0.9)]",
       className,
     )}

@@ -24,7 +24,7 @@
     "text": {
       "primary": "text-slate-50",
       "secondary": "text-slate-400",
-      "muted": "text-slate-500",
+      "muted": "text-slate-300",
       "accent": "text-blue-400"
     },
     "borders": {

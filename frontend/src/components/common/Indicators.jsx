@@ -34,7 +34,7 @@ export const ConfidenceReadout = ({ confidence, testId }) => {
   const available = typeof confidence === "number";
   return (
     <div data-testid={testId} className="flex items-baseline gap-2">
-      <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-500">
+      <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-slate-300">
         Model confidence
       </span>
       <span
