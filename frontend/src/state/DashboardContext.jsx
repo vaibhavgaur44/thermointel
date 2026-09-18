@@ -15,7 +15,7 @@ const INITIAL_FILTERS = {
 export const DashboardProvider = ({ children }) => {
   const [filters, setFilters] = useState(INITIAL_FILTERS);
   const [selectedEventId, setSelectedEventId] = useState(null);
-  const [demoMode, setDemoMode] = useState(false);
+  const [demoMode, setDemoMode] = useState(true);
   const [basemap, setBasemap] = useState("dark");
   const [mapMode, setMapMode] = useState("2D");
   const [cameraTarget, setCameraTarget] = useState(null);
