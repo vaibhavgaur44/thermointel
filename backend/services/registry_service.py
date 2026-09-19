@@ -21,18 +21,36 @@ def _origin_query(include_demo: bool) -> dict:
 async def list_alerts(
     status: Optional[AlertStatus] = AlertStatus.OPEN,
     state: Optional[str] = None,
+    classifications: Optional[list[str]] = None,
+    source_types: Optional[list[SourceType]] = None,
+    time_range: Optional[TimeRange] = None,
     include_demo: bool = False,
     limit: int = 50,
     offset: int = 0,
 ) -> tuple[list[AlertSummary], int]:
     db = get_db()
     query = _origin_query(include_demo)
+
     if status is not None:
         query["status"] = status.value
+
     if state:
         query["state"] = state
 
+    if classifications:
+        query["event_type"] = {"$in": classifications}
+
+    if source_types:
+        query["source_type"] = {"$in": [s.value for s in source_types]}
+
+    if time_range is not None:
+        cutoff = datetime.now(timezone.utc) - timedelta(
+            seconds=TIME_RANGE_SECONDS[time_range]
+        )
+        query["raised_at"] = {"$gte": cutoff}
+
     total = await db[Collections.ALERTS].count_documents(query)
+
     docs = (
         await db[Collections.ALERTS]
         .find(query)
@@ -41,6 +59,7 @@ async def list_alerts(
         .limit(limit)
         .to_list(length=limit)
     )
+
     return [AlertSummary.from_alert(Alert.from_mongo(d)) for d in docs], total
 
 

@@ -37,6 +37,27 @@ const RegionZoom = ({ bbox }) => {
   return null;
 };
 
+const EventFocus = ({ selectedEventId, events }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!selectedEventId) return;
+
+    const event = events.find(
+      (item) => item.event_id === selectedEventId
+    );
+
+    if (!event) return;
+
+    map.panTo([event.latitude, event.longitude], {
+      animate: true,
+      duration: 0.5,
+    });
+  }, [selectedEventId, events, map]);
+
+  return null;
+};
+
 export const Map2D = () => {
    const {
   filters,
@@ -69,6 +90,10 @@ export const Map2D = () => {
         scrollWheelZoom
       >
         <RegionZoom bbox={filters.region?.bbox} />
+        <EventFocus
+          selectedEventId={selectedEventId}
+          events={events}
+        />
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution="© OpenStreetMap contributors"

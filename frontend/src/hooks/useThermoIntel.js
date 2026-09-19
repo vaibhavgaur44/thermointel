@@ -38,12 +38,13 @@ export const usePriorityEvents = () => {
 
 export const useAlerts = () => {
   const { queryFilters } = useDashboard();
+
   return useQuery({
     queryKey: key("alerts", queryFilters),
     queryFn: () =>
       thermoIntelApi.alerts({
-        state: queryFilters.state,
-        includeDemo: queryFilters.includeDemo,
+        ...queryFilters,
+        status: "OPEN",
         limit: 25,
       }),
   });
