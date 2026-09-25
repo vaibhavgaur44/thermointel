@@ -1,68 +1,26 @@
-import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
-import { MapContainer, TileLayer, CircleMarker, Popup, useMap } from "react-leaflet";
-import "leaflet/dist/leaflet.css";
-import "@/App.css";
-import { Bell, Bot, ChevronRight, Database, Flame, Gauge, Layers3, MapPin, RefreshCw, Search, ShieldAlert, SlidersHorizontal, Activity, Factory, Satellite, X } from "lucide-react";
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, BarChart, Bar } from "recharts";
+import { Toaster } from "sonner";
 
-const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-console.log("THERMOINTEL API:", API); 
-const COLORS = {
-  agricultural: "#34c759",
-  industrial: "#ff9f0a",
-  persistent_source: "#149ed4",
-  industrial_fire: "#ff453a"
-};
+import Dashboard from "@/pages/Dashboard";
+import { DashboardProvider } from "@/state/DashboardContext";
 
-const CLASSES = Object.keys(COLORS);
-
-const LABELS = {
-  agricultural: "Agricultural",
-  industrial: "Industrial",
-  persistent_source: "Persistent Source",
-  industrial_fire: "Industrial Fire"
-};
-
-function FitBounds({ region }) { const map=useMap(); useEffect(()=>{ if(region!=="all-india") map.setZoom(6); else map.setZoom(5); },[region,map]); return null; }
-
-function App(){
-  const [region,setRegion]=useState("all-india"); const [regions,setRegions]=useState([]); const [summary,setSummary]=useState({}); const [anomalies,setAnomalies]=useState([]); const [facilities,setFacilities]=useState([]); const [alerts,setAlerts]=useState([]); const [selected,setSelected]=useState(null); const [detail,setDetail]=useState(null); const [filter,setFilter]=useState("All signals"); const [page,setPage]=useState("overview"); const [analystOpen,setAnalystOpen]=useState(false); const [question,setQuestion]=useState(""); const [answer,setAnswer]=useState(""); const [busy,setBusy]=useState(false); const [ingestState,setIngestState]=useState(null);
-  const load=async()=>{ setBusy(true); try{ const [r,s,a,f,al]=await Promise.all([axios.get(`${API}/regions`),axios.get(`${API}/dashboard/summary?region=${region}`),axios.get(`${API}/anomalies?region=${region}`),axios.get(`${API}/facilities?region=${region}`),axios.get(`${API}/alerts?region=${region}`)]); setRegions(r.data);setSummary(s.data);setAnomalies(a.data.items);setFacilities(f.data.items);setAlerts(al.data.items); }catch(e){ console.error(e); } finally{setBusy(false)} };
-  useEffect(()=>{load()},[region]);
-  useEffect(()=>{if(selected) axios.get(`${API}/anomalies/${selected.id}`).then(r=>setDetail(r.data))},[selected]);
-  const [currentTime, setCurrentTime] = useState(new Date());
-  useEffect(()=>{const timer=setInterval(()=>setCurrentTime(new Date()),60000);return()=>clearInterval(timer)},[]);
-  const visible=useMemo(()=>{
-  const filtered =
-  filter === "All signals"
-    ? anomalies
-    : filter === "industrial"
-      ? anomalies.filter(a =>
-          ["industrial", "persistent_source", "industrial_fire"].includes(a.predicted_class)
-        )
-      : anomalies.filter(a => a.predicted_class === filter);
-  const priority={agricultural:1,persistent_source:2,industrial:3,industrial_fire:4};
-  return [...filtered].sort((a,b)=>(priority[a.predicted_class]||0)-(priority[b.predicted_class]||0));
-},[anomalies,filter]);
-  useEffect(()=>{const mapNode=document.querySelector('.leaflet-container'); if(mapNode) mapNode.setAttribute('data-testid','thermal-map')},[visible.length,facilities.length]);
-  const runIngest=async()=>{setIngestState("running");try{const r=await axios.post(`${API}/ingestion/firms?region=${region}&days=1`);setIngestState(`complete · ${r.data.inserted} records`);load()}catch(e){setIngestState(e.response?.data?.detail||"unavailable")}};
-  const ask=async()=>{if(!question.trim())return;setBusy(true);try{const r=await axios.post(`${API}/analyst`,{question,region});setAnswer(r.data.answer)}catch(e){setAnswer(e.response?.data?.detail||"Analyst unavailable")};setBusy(false)};
-  return <div className="shell" data-testid="thermointel-app">
-    <header className="topbar"><div className="brand"><div className="brand-mark"><Flame size={19}/></div><div><div className="brand-name">THERMO<span>INTEL</span></div><div className="brand-sub">THERMAL INTELLIGENCE / INDIA</div></div></div><div className="top-meta"><span className="live-dot"/> SYSTEM ONLINE <span className="divider"/> <span className="mono">{currentTime.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})} IST</span><button className="icon-btn" data-testid="alerts-open-button" onClick={()=>setPage("alerts")}><Bell size={17}/><i>{alerts.length}</i></button></div></header>
-    <div className="body-grid"><aside className="sidebar"><div className="side-label">COMMAND VIEWS</div>{[["overview",Gauge,"Overview"],["investigate",Search,"Investigate"],["persistent",Activity,"Persistent Sources"],["alerts",Bell,"Alerts"]].map(([id,Icon,label])=><button key={id} className={`nav-item ${page===id?'active':''}`} data-testid={`nav-${id}-button`} onClick={()=>setPage(id)}><Icon size={17}/><span>{label}</span>{id==="alerts"&&alerts.length>0?<b>{alerts.length}</b>:<ChevronRight size={14}/>}</button>)}<div className="side-rule"/><div className="side-label">REGION SCOPE</div><select value={region} onChange={e=>setRegion(e.target.value)} data-testid="region-selector"><option value="all-india">All India</option>{regions.filter(r=>r.id!=="all-india").map(r=><option key={r.id} value={r.id}>{r.label}</option>)}</select><div className="scope-card"><div className="scope-head"><MapPin size={14}/> ACTIVE SCOPE</div><strong>{summary.scope||"India"}</strong><span>Configurable regional boundary</span></div><div className="sidebar-bottom"><span>v0.1.0 / MVP</span><span className="mono">FIRMS · OSM · ML</span></div></aside>
-      <main className="main"><div className="page-head"><div><div className="eyebrow"><span className="red-line"/> INDIA / {summary.scope||"ALL INDIA"}</div><h1>{page==="overview"?"THERMAL COMMAND CENTER":page.toUpperCase()}</h1><p className="page-desc">Satellite-derived thermal signals, industrial context, and explainable priority.</p></div><div className="head-actions"><button className="refresh-btn" data-testid="refresh-data-button" onClick={runIngest}><RefreshCw size={14} className={ingestState==="running"?"spin":""}/> REFRESH</button></div></div>
-      {page==="overview"&&<><section className="kpis">{[["TOTAL SIGNALS",summary.total_anomalies,"thermal observations",Flame,"red"],["INDUSTRIAL CLASSIFIED",summary.industrial_classified,"predicted classes",Factory,"blue"],["PERSISTENT SOURCES",summary.persistent_sources,"active hotspots",Activity,"amber"],["HIGH PRIORITY",summary.high_priority,"requires investigation",ShieldAlert,"pink"]].map(([label,value,sub,Icon,color])=><div className="kpi" key={label} data-testid={`kpi-${label.toLowerCase().replaceAll(' ','-')}`}><div className={`kpi-icon ${color}`}><Icon size={18}/></div><div><div className="kpi-label">{label}</div><div className="kpi-value">{value??"—"}</div><div className="kpi-sub">{sub}</div></div></div>)}</section><section className="workspace"><div className="map-panel"><div className="panel-toolbar"><div className="toolbar-title"><Layers3 size={15}/> LIVE THERMAL OVERLAY <span className="count">{visible.length} SIGNALS</span></div><div className="filter-pills">{["All signals",...CLASSES].map(x=><button key={x} className={filter===x?"pill active":"pill"} data-testid={`filter-${x.toLowerCase().replaceAll(/[^a-z0-9]+/g,'-')}-button`} onClick={()=>setFilter(x)}>{LABELS[x] || x}</button>)}</div></div><div className="map-wrap"><MapContainer center={[20.6,78.9]} zoom={5} scrollWheelZoom className="map" data-testid="thermal-map"><TileLayer attribution='&copy; OpenStreetMap contributors' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"/><FitBounds region={region}/>{visible.map(a=><CircleMarker key={a.id} center={[a.latitude,a.longitude]} radius={a.priority_score>=80?10:7} pathOptions={{color:COLORS[a.predicted_class]||'#ff453a',fillColor:COLORS[a.predicted_class]||'#ff453a',fillOpacity:.85,weight:2}} eventHandlers={{click:()=>setSelected(a)}}><Popup><strong>{LABELS[a.predicted_class] || a.predicted_class}</strong><br/>Priority {a.priority_score}/100<br/>{a.latitude.toFixed(2)}°N, {a.longitude.toFixed(2)}°E</Popup></CircleMarker>)}</MapContainer><div className="map-legend">
-  <span><i className="legend-dot agricultural"/> Agricultural</span>
-  <span><i className="legend-dot industrial"/> Industrial</span>
-  <span><i className="legend-dot persistent-source"/> Persistent Source</span>
-  <span><i className="legend-dot industrial-fire"/> Industrial Fire</span>
-</div><div className="map-stamp">NASA FIRMS / OSM CONTEXT</div></div></div><aside className="right-rail">{selected?<Investigation data={selected} detail={detail} onClose={()=>setSelected(null)}/>:<><div className="rail-head"><span>PRIORITY QUEUE</span><span className="mono">{visible.length} EVENTS</span></div>{visible.slice(0,5).map(a=><button className="event-row" key={a.id} data-testid={`anomaly-${a.id}-button`} onClick={()=>setSelected(a)}><div className="event-top"><span className={`status ${(a.anomaly_status || "normal").toLowerCase()}`}>{a.anomaly_status}</span></div><strong>{LABELS[a.predicted_class] || a.predicted_class}</strong><div className="event-bottom"><span>{a.nearest_facility||"No industrial context"}</span><b>{a.priority_score}<small>/100</small></b></div></button>)}<div className="rail-head rail-spaced"><span>CONTEXT SERVICES</span></div><div className="service-row"><Satellite size={15}/><span>Satellite imagery</span><b className="muted">UNAVAILABLE</b></div><div className="service-row"><Layers3 size={15}/><span>Land-cover evidence</span><b className="muted">UNAVAILABLE</b></div><div className="scientific-note">Detection ≠ confirmed fire<br/>Proximity ≠ causation<br/>Confidence ≠ ground truth</div></>}</aside></section></>}
-      {page!=="overview"&&<ContentPage page={page} anomalies={anomalies} alerts={alerts} runIngest={runIngest} ingestState={ingestState} setSelected={setSelected} />}</main></div>
-    {analystOpen&&<div className="modal-backdrop"><div className="analyst-modal"><div className="modal-head"><div><div className="eyebrow"><Bot size={14}/> THERMOINTEL ANALYST</div><h2>ASK THE SIGNALS</h2></div><button className="icon-btn" data-testid="analyst-close-button" onClick={()=>setAnalystOpen(false)}><X size={18}/></button></div><p className="modal-copy">Answers are grounded in the current {summary.scope||"India"} dataset. No live data is invented.</p><textarea value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Why is the Jamnagar signal high priority?" data-testid="analyst-question-input"/><button className="ask-btn" data-testid="analyst-submit-button" onClick={ask}><Bot size={15}/> {busy?"ANALYZING…":"ASK ANALYST"}</button>{answer&&<div className="analyst-answer" data-testid="analyst-answer"><span>ANALYST RESPONSE</span><p>{answer}</p></div>}<div className="modal-foot">GPT-5.4 · backend-only · DEMO DATA context</div></div></div>}
-  </div>
+export default function App() {
+  return (
+    <DashboardProvider>
+      <Dashboard />
+      <Toaster
+        theme="dark"
+        position="bottom-center"
+        toastOptions={{
+          style: {
+            background: "rgba(7,11,20,0.92)",
+            border: "1px solid rgba(51,65,85,0.6)",
+            color: "#e2e8f0",
+            backdropFilter: "blur(12px)",
+            borderRadius: "4px",
+            fontSize: "12px",
+          },
+        }}
+      />
+    </DashboardProvider>
+  );
 }
-
-function Investigation({data,detail,onClose}){return <div className="investigation"><div className="rail-head"><span>SELECTED SIGNAL</span><button className="close-mini" data-testid="investigation-close-button" onClick={onClose}><X size={14}/></button></div><h2>{LABELS[data.predicted_class] || data.predicted_class}</h2><div className="confidence"><div><span>SYSTEM CONFIDENCE</span><strong>{Math.round(data.prediction_confidence*100)}%</strong></div><div className="confidence-bar"><i style={{width:`${data.prediction_confidence*100}%`}}/></div></div><div className="detail-grid">{[["FRP",`${data.frp} MW`],["COORDINATES",`${data.latitude.toFixed(3)}°N / ${data.longitude.toFixed(3)}°E`],["NEAREST FACILITY",data.nearest_facility||"None identified"],["DISTANCE",`${data.distance_km} km`],["PERSISTENCE",`${Math.round(data.persistence_score*100)}%`],["PRIORITY",`${data.priority_score}/100`]].map(([x,y])=><div key={x}><span>{x}</span><b>{y}</b></div>)}</div><div className="evidence"><div className="rail-head"><span>MODEL EVIDENCE</span></div>{(data.evidence||[]).map((e,i)=><div className="evidence-row" key={i}><i>+</i>{e}</div>)}</div>{detail?.history&&<div className="chart-box"><div className="rail-head"><span>FRP / BASELINE</span></div><ResponsiveContainer width="100%" height={130}><AreaChart data={detail.history}><XAxis dataKey="date" hide/><YAxis hide/><Tooltip contentStyle={{background:'#ffffff',border:'1px solid #deded9',fontSize:11,color:'#202124',boxShadow:'0 2px 8px rgba(0,0,0,0.08)'}}/><Area type="monotone" dataKey="baseline" stroke="#8e9eaf" fill="none" strokeDasharray="3 3"/><Area type="monotone" dataKey="frp" stroke="#ff453a" fill="#ff453a" fillOpacity={.16}/></AreaChart></ResponsiveContainer></div>}</div>}
-function ContentPage({page,anomalies,alerts,runIngest,ingestState,setSelected}){if(page==="investigate")return <section className="table-section"><div className="section-title">ALL THERMAL SIGNALS <span>{anomalies.length} records</span></div>{anomalies.map(a=><button className="table-row" data-testid={`investigate-${a.id}-button`} key={a.id} onClick={()=>setSelected(a)}><strong>{LABELS[a.predicted_class] || a.predicted_class}</strong><span>{a.nearest_facility||"No facility"}</span><span>{a.frp} MW</span><b>{a.priority_score}</b></button>)}</section>;if(page==="persistent")return <section className="table-section"><div className="section-title">PERSISTENT THERMAL SOURCES <span>historical activity</span></div>{anomalies.filter(a=>a.predicted_class==="persistent_source").map(a=><button className="table-row" data-testid={`hotspot-${a.id}-button`} key={a.id} onClick={()=>setSelected(a)}><strong>{a.nearest_facility||"Unassociated source"}</strong><span>{a.detections_30d} detections / 30d</span><span>{Math.round(a.persistence_score*100)}% persistence</span><b>{a.priority_score}</b></button>)}</section>;if(page==="alerts")return <section className="table-section"><div className="section-title">ALERTS FEED <span>logic-generated only</span></div>{alerts.map(a=><div className="alert-row" data-testid={`alert-${a.id}`} key={a.id}><ShieldAlert size={17}/><div><b>{a.reason}</b><span>{a.location} · {new Date(a.time).toLocaleString()}</span></div><strong>{a.priority}</strong><em>{a.status}</em></div>)}</section>;if(page==="pipeline")return <section className="pipeline-grid"><div className="pipeline-card"><div className="section-title">FIRMS INGESTION</div><p>NASA FIRMS area query for the active India region.</p><button className="ask-btn" data-testid="run-firms-ingestion-button" onClick={runIngest}><RefreshCw size={14}/> RUN FIRMS INGESTION</button><div className="pipeline-status" data-testid="ingestion-status">{ingestState||"Ready · requires FIRMS_API_KEY"}</div></div><div className="pipeline-card"><div className="section-title">SOURCE STATUS</div><div className="source-line"><span>OSM industrial context</span><b>DEMO CONTEXT</b></div><div className="source-line"><span>Satellite imagery</span><b>UNAVAILABLE</b></div><div className="source-line"><span>Land-cover data</span><b>UNAVAILABLE</b></div><div className="source-line"><span>ML evaluation</span><b>REQUIRES LABELS</b></div></div></section>;return <section className="table-section"><div className="section-title">SYSTEM ALERTS <span>monitoring overview</span></div>{alerts.slice(0,4).map(a=><div className="alert-row" key={a.id}><ShieldAlert size={17}/><div><b>{a.reason}</b><span>{a.location}</span></div><strong>{a.priority}</strong></div>)}</section>}
-export default App;

@@ -1,0 +1,38 @@
+{
+  "project": "ThermoIntel V2",
+  "phase": 4,
+  "algorithm": "XGBoost",
+  "random_state": 42,
+  "split": "70/15/15 group split",
+  "group_column": "group_id",
+  "taxonomy": {
+    "M1": [
+      "AGRICULTURAL",
+      "INDUSTRIAL",
+      "UNKNOWN_FIRE_SOURCE"
+    ],
+    "M2": [
+      "AGRICULTURAL_FIRE",
+      "FOREST_FIRE"
+    ],
+    "M3": [
+      "INDUSTRIAL_FIRE",
+      "PERSISTENT_SOURCE"
+    ],
+    "M4": [
+      "GAS_FLARE",
+      "POWER_PLANT",
+      "OIL_REFINERY_PETROCHEMICAL",
+      "STEEL_METAL",
+      "CEMENT_KILN",
+      "BRICK_KILN",
+      "CHEMICAL",
+      "FOUNDRY_SMELTING",
+      "INDUSTRIAL_FURNACE_BOILER",
+      "WASTE_INCINERATION",
+      "MINING_MINERAL_PROCESSING",
+      "OTHER_PERSISTENT_INDUSTRIAL_SOURCE",
+      "UNKNOWN_PERSISTENT_SOURCE"
+    ]
+  }
+}

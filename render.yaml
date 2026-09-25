@@ -1,0 +1,40 @@
+services:
+  - type: web
+    name: thermointel-api
+    runtime: python
+    rootDir: backend
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: FIRMS_API_KEY
+        sync: false
+      - key: FIRMS_BASE_URL
+        sync: false
+      - key: ACTIVE_MODEL_VERSION
+        sync: false
+      - key: ALLOW_DEMO_DATA
+        value: "false"
+
+  - type: web
+    name: thermointel-web
+    runtime: static
+    rootDir: frontend
+    buildCommand: yarn install && yarn build
+    staticPublishPath: build
+    envVars:
+      - key: REACT_APP_BACKEND_URL
+        sync: false
+      - key: REACT_APP_CESIUM_ION_TOKEN
+        sync: false
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

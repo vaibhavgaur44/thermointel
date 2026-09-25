@@ -1,334 +1,67 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Query
-from fastapi.responses import StreamingResponse
-from dotenv import load_dotenv
+"""ThermoIntel v2 - FastAPI application entry point.
+
+FastAPI is the orchestrator/middleman between MongoDB and the React/Cesium
+frontend. No classification, threat or anomaly logic lives in the frontend.
+"""
+import logging
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from pydantic import BaseModel, Field
-from typing import Optional, List
-from pathlib import Path
-from datetime import datetime, timezone, timedelta
-import os, uuid, logging, math, json, csv, io, asyncio
 
-try:
-    import requests
-except ImportError:
-    requests = None
+from api.router import api_router
+from core.config import settings
+from core.database import close_db, ensure_indexes, get_db
 
-from services import model_inference, feature_engineering, firms_pipeline, osm_facilities, firms_scheduler
-
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / ".env")
-mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ["DB_NAME"]]
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger("thermointel")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 
-app = FastAPI(title="ThermoIntel API", version="0.1.0")
-api = APIRouter(prefix="/api")
 
-REGIONS = {
-    # Matches INDIA_BBOX from ThermoIntel_ML_ETL_Colab_IndiaWide.ipynb (west, south, east, north).
-    # This is the actual FIRMS/feature-engineering/facility operating envelope, not an exact
-    # political boundary — coordinates outside India within this rectangle are expected.
-    "all-india": {"label": "All India", "bbox": [68.0, 6.0, 98.0, 38.0]},
-    "gujarat": {"label": "Gujarat", "bbox": [68.1, 20.0, 74.5, 24.7]},
-    "maharashtra": {"label": "Maharashtra", "bbox": [72.5, 15.6, 80.2, 22.1]},
-    "odisha": {"label": "Odisha", "bbox": [81.3, 17.8, 87.6, 22.6]},
-}
-CLASSES = ["Industrial Fire", "Persistent Industrial Thermal Source", "Gas Flare / Industrial Flare", "Agricultural Burning", "Wildfire / Natural Fire", "Mining / Industrial Activity", "Other / Unknown"]
-
-class AnalystRequest(BaseModel):
-    question: str = Field(min_length=3, max_length=800)
-    region: str = "all-india"
-
-class MLClassifyRequest(BaseModel):
-    features: dict = Field(description="Feature dict keyed by the names in /api/ml/schema")
-
-def now_iso():
-    return datetime.now(timezone.utc).isoformat()
-
-def haversine(a_lat, a_lon, b_lat, b_lon):
-    r = 6371
-    p1, p2 = math.radians(a_lat), math.radians(b_lat)
-    dp, dl = math.radians(b_lat-a_lat), math.radians(b_lon-a_lon)
-    x = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
-    return round(2*r*math.asin(math.sqrt(x)), 2)
-
-def in_bbox(lat, lon, bbox):
-    return bbox[1] <= lat <= bbox[3] and bbox[0] <= lon <= bbox[2]
-
-def data_mode_label(docs):
-    """Real ThermoIntel detections (is_demo=False) can now coexist with DEMO
-    DATA fixtures in the same collection — report which is actually present
-    instead of always claiming DEMO DATA."""
-    if not docs:
-        return "DEMO DATA"
-    demo_count = sum(1 for d in docs if d.get("is_demo", True))
-    if demo_count == len(docs):
-        return "DEMO DATA"
-    if demo_count == 0:
-        return "REAL DATA · NASA FIRMS"
-    return "MIXED · DEMO + REAL DATA"
-
-def score_event(frp, confidence, distance_km, persistence, z_score, predicted_class):
-    intensity = min(30, frp / 10)
-    proximity = max(0, min(20, 20 - (distance_km or 20) * 1.5))
-    deviation = min(20, max(0, z_score * 6))
-    persist = min(15, persistence * 15)
-    class_signal = 15 if predicted_class in ["Industrial Fire", "Gas Flare / Industrial Flare"] else 7
-    return round(min(100, intensity + confidence * 0.15 + proximity + deviation + persist + class_signal))
-
-def classify(frp, confidence, distance_km, detections_30d, z_score):
-    if distance_km is not None and distance_km < 8 and z_score >= 2.2:
-        label = "Industrial Fire"
-    elif distance_km is not None and distance_km < 5 and detections_30d >= 8:
-        label = "Persistent Industrial Thermal Source"
-    elif distance_km is not None and distance_km < 3 and detections_30d >= 3:
-        label = "Gas Flare / Industrial Flare"
-    elif frp > 100 and confidence < 70:
-        label = "Wildfire / Natural Fire"
-    elif frp < 25:
-        label = "Agricultural Burning"
-    else:
-        label = "Other / Unknown"
-    base = {"Industrial Fire": .91, "Persistent Industrial Thermal Source": .87, "Gas Flare / Industrial Flare": .89, "Wildfire / Natural Fire": .76, "Agricultural Burning": .71, "Other / Unknown": .54}[label]
-    return label, round(min(.98, base + max(0, min(.06, z_score*.01))), 2)
-
-def demo_facilities():
-    return [
-        {"id":"fac-jamnagar-01","name":"Jamnagar Refining Complex","facility_type":"refinery","latitude":22.35,"longitude":69.89,"osm_id":"demo-osm-001","source":"DEMO DATA · OSM-shaped fixture","tags":{"industry":"oil"},"is_demo":True},
-        {"id":"fac-dahej-01","name":"Dahej Petrochemical Estate","facility_type":"petrochemical","latitude":21.70,"longitude":72.63,"osm_id":"demo-osm-002","source":"DEMO DATA · OSM-shaped fixture","tags":{"industrial":"petrochemical"},"is_demo":True},
-        {"id":"fac-trombay-01","name":"Trombay Power & Industrial Zone","facility_type":"power","latitude":19.00,"longitude":72.93,"osm_id":"demo-osm-003","source":"DEMO DATA · OSM-shaped fixture","tags":{"power":"plant"},"is_demo":True},
-        {"id":"fac-talcher-01","name":"Talcher Energy Corridor","facility_type":"power","latitude":20.95,"longitude":85.22,"osm_id":"demo-osm-004","source":"DEMO DATA · OSM-shaped fixture","tags":{"industrial":"energy"},"is_demo":True},
-    ]
-
-def demo_anomalies():
-    base = datetime.now(timezone.utc)
-    raw = [
-        ("an-001",22.36,69.90,186,96,"Industrial Fire",.93,2.9,0.18,14,"High",88,"Jamnagar Refining Complex","refinery"),
-        ("an-002",21.70,72.65,78,91,"Persistent Industrial Thermal Source",.88,1.8,0.91,23,"Watch",63,"Dahej Petrochemical Estate","petrochemical"),
-        ("an-003",19.01,72.92,128,82,"Gas Flare / Industrial Flare",.89,1.4,0.56,11,"Watch",67,"Trombay Power & Industrial Zone","power"),
-        ("an-004",20.46,73.92,42,74,"Agricultural Burning",.71,42.0,0.08,2,"Normal",28,None,None),
-        ("an-005",20.95,85.20,231,88,"Industrial Fire",.92,2.3,0.31,8,"High",91,"Talcher Energy Corridor","power"),
-        ("an-006",21.05,85.41,109,68,"Wildfire / Natural Fire",.76,25.0,0.12,4,"Watch",51,None,None),
-    ]
-    docs=[]
-    for i,(ident,lat,lon,frp,conf,label,prob,dist,persist,count,status,priority,facility,ftype) in enumerate(raw):
-        docs.append({"id":ident,"latitude":lat,"longitude":lon,"acquisition_datetime":(base-timedelta(hours=i*7)).isoformat(),"satellite":"VIIRS SNPP","instrument":"VIIRS","confidence":conf,"frp":frp,"daynight":"D" if i%2 else "N","source":"DEMO DATA · synthetic fixture","is_demo":True,"region":"India","state":"Gujarat" if i<4 else "Odisha","predicted_class":label,"prediction_confidence":prob,"nearest_facility":facility,"nearest_facility_type":ftype,"distance_km":dist,"persistence_score":persist,"detections_30d":count,"z_score":3.2 if status=="High" else 1.1,"anomaly_status":status,"priority_score":priority,"evidence":["high thermal intensity" if frp>100 else "moderate thermal intensity", "industrial context detected" if facility else "no nearby industrial facility", "historical baseline comparison available"],"land_cover_status":"Unavailable · configure land-cover service","imagery_status":"Unavailable · configure satellite imagery service"})
-    return docs
-
-async def seed_demo():
-    if await db.anomalies.count_documents({}) == 0:
-        await db.anomalies.insert_many(demo_anomalies())
-    if await db.facilities.count_documents({}) == 0:
-        await db.facilities.insert_many(demo_facilities())
-
-@app.on_event("startup")
-async def startup():
+@asynccontextmanager
+async def lifespan(_: FastAPI):
     try:
-        await seed_demo()
-    except Exception as exc:
-        logger.warning("Demo seed unavailable: %s", exc)
-    try:
-        await firms_pipeline.ensure_indexes(db)
-    except Exception as exc:
-        logger.warning("Index setup skipped: %s", exc)
-    all_india = REGIONS["all-india"]
-    firms_scheduler.start(db, all_india["bbox"], all_india["label"])
-
-@api.get("/")
-async def root():
-    return {"name":"ThermoIntel API","status":"online","scope":"India","demo_data":True}
-
-@api.get("/regions")
-async def regions():
-    return [{"id":k,"label":v["label"],"bbox":v["bbox"]} for k,v in REGIONS.items()]
-
-@api.get("/dashboard/summary")
-async def summary(region: str = "all-india"):
-    bbox = REGIONS.get(region, REGIONS["all-india"])["bbox"]
-    docs = await db.anomalies.find(
-    {"source": {"$ne": "NASA FIRMS · historical"}},
-    {"_id": 0}
-).to_list(5000)
-    docs = [d for d in docs if in_bbox(d.get("latitude",0), d.get("longitude",0), bbox)]
-    facs = await db.facilities.count_documents({})
-    return {"total_anomalies":len(docs),"industrial_classified":sum(d.get("predicted_class") in ["industrial", "persistent_source", "industrial_fire"] for d in docs),"persistent_sources":sum(d.get("predicted_class")=="persistent_source" for d in docs),"abnormal_events":sum(d.get("anomaly_status") in ["High","Anomalous"] for d in docs),"high_priority":sum(d.get("priority_score",0)>=80 for d in docs),"facilities_monitored":facs,"last_update": max(
-    [
-        d.get("acquisition_datetime")
-        if hasattr(d.get("acquisition_datetime"), "year")
-        else datetime.fromisoformat(
-            str(d.get("acquisition_datetime")).replace("Z", "+00:00")
-        )
-        for d in docs
-        if d.get("acquisition_datetime")
-    ],
-    default=None,
-),"data_mode":data_mode_label(docs),"scope":REGIONS.get(region,REGIONS["all-india"])["label"]}
-
-@api.get("/anomalies")
-async def anomalies(region: str="all-india", classification: Optional[str]=None, status: Optional[str]=None, min_priority: int=0, limit: int=5000):
-    bbox=REGIONS.get(region,REGIONS["all-india"])["bbox"]
-    docs=await db.anomalies.find(
-    {"source": {"$ne": "NASA FIRMS · historical"}},
-    {"_id":0}
-).sort("priority_score",-1).to_list(5000)
-    docs=[d for d in docs if in_bbox(d.get("latitude",0),d.get("longitude",0),bbox)]
-    if classification: docs=[d for d in docs if d.get("predicted_class")==classification]
-    if status: docs=[d for d in docs if d.get("anomaly_status")==status]
-    return {"items":[{**d,"type":"Feature","geometry":{"type":"Point","coordinates":[d["longitude"],d["latitude"]]},"properties":d} for d in docs if d.get("priority_score",0)>=min_priority][:limit],"count":len(docs),"data_mode":data_mode_label(docs)}
-
-@api.get("/anomalies/{anomaly_id}")
-async def anomaly(anomaly_id: str):
-    doc=await db.anomalies.find_one({"id":anomaly_id},{"_id":0})
-    if not doc: raise HTTPException(404,"Anomaly not found")
-    history=[{"date":(datetime.now(timezone.utc)-timedelta(days=i)).strftime("%b %d"),"frp":round(max(12,doc["frp"]*(.56+((i*17)%40)/100)),1),"baseline":round(doc["frp"]*.56,1)} for i in range(13,-1,-1)]
-    return {"anomaly":doc,"history":history,"model_explanation":doc.get("evidence",[]),"classification_probabilities":[{"label":c,"value":(doc["prediction_confidence"] if c==doc["predicted_class"] else round(max(.03,(1-doc["prediction_confidence"])/6),2))} for c in CLASSES],"scientific_note":"Detection, predicted classification, and anomaly status are separate signals. This is a system priority score, not an official risk rating."}
-
-@api.get("/facilities")
-async def facilities(region: str="all-india"):
-    bbox=REGIONS.get(region,REGIONS["all-india"])["bbox"]
-    docs=await db.facilities.find({}, {"_id":0}).to_list(5000)
-    scoped=[d for d in docs if in_bbox(d.get("latitude",0),d.get("longitude",0),bbox)]
-    return {"items":scoped,"data_mode":data_mode_label(scoped)}
-
-@api.get("/hotspots")
-async def hotspots(region: str="all-india"):
-    docs=await anomalies(region,limit=100)
-    return {"items":[d for d in docs["items"] if d.get("persistence_score",0)>=.5],"data_mode":docs["data_mode"]}
-
-@api.get("/alerts")
-async def alerts(region: str="all-india"):
-    docs=await anomalies(region,limit=100)
-    return {"items":[{"id":"alert-"+d["id"],"time":d["acquisition_datetime"],"location":f"{d['latitude']:.2f}°N, {d['longitude']:.2f}°E","reason":"Potential abnormal industrial thermal activity" if d["anomaly_status"]=="High" else "Persistent thermal source detected","priority":d["priority_score"],"status":"Open","anomaly_id":d["id"]} for d in docs["items"] if d.get("priority_score",0)>=60],"data_mode":docs["data_mode"]}
-
-@api.get("/model/status")
-async def model_status():
-    availability = model_inference.models_available()
-    return {"available":False,"version":"baseline-rules-v0.1","metrics_available":False,"message":"Model evaluation unavailable — training dataset requires validation.","classes":CLASSES,"training_pipeline":"/app/ml/training/train_classifier.py","trained_models":{"model1_agricultural_vs_industrial":availability["model1_loaded"],"model2_persistent_vs_industrial_fire":availability["model2_loaded"],"metrics_validated":False,"disclaimer":model_inference.DISCLAIMER}}
-
-@api.get("/ml/schema")
-async def ml_schema():
-    return model_inference.get_feature_schema()
-
-@api.post("/ml/classify")
-async def ml_classify(req: MLClassifyRequest):
-    availability = model_inference.models_available()
-    if not availability["model1_loaded"]:
-        raise HTTPException(503, "Trained model artifacts are not available on this deployment.")
-    try:
-        result = model_inference.run_inference(req.features)
-    except Exception as exc:
-        logger.exception("ML inference failed")
-        raise HTTPException(500, f"Inference failed: {exc}")
-    return result
-
-@api.get("/ingestion/status")
-async def ingestion_status():
-    return {"firms":{"status":"ready" if os.environ.get("FIRMS_API_KEY") else "configuration_required","source":firms_pipeline.FIRMS_SOURCE,"last_attempt":firms_scheduler.INGESTION_STATE.get("last_attempt"),"last_run":firms_scheduler.INGESTION_STATE.get("last_success"),"last_error":firms_scheduler.INGESTION_STATE.get("last_error"),"records":await db.anomalies.count_documents({})},"osm":{"status":"ready" if requests else "unavailable","last_run":None,"records":await db.facilities.count_documents({"is_demo":False})},"satellite":{"status":"unavailable","message":"Configure a public imagery provider to enable retrieval"},"land_cover":{"status":"unavailable","message":"Configure a public raster/data path to enable land-cover evidence"},"data_mode":"DEMO DATA"}
-
-@api.post("/ingestion/firms")
-async def ingest_firms(region: str="all-india", days: int=1):
-    key=os.environ.get("FIRMS_API_KEY")
-    if not key: raise HTTPException(503,"FIRMS_API_KEY is not configured; demo data remains available.")
-    if requests is None: raise HTTPException(503,"Requests dependency unavailable")
-    scope=REGIONS.get(region,REGIONS["all-india"])
-    try:
-        return await firms_scheduler.perform_firms_ingestion(db, scope["bbox"], scope["label"], days=max(1,min(days,10)))
-    except Exception as exc:
-        detail=str(exc).replace(key,"***")
-        logger.error("FIRMS ingestion failed: %s", detail)
-        raise HTTPException(502,f"FIRMS ingestion unavailable: {detail}")
-
-@api.post("/ingestion/osm")
-async def ingest_osm(region: str="all-india"):
-    if requests is None: raise HTTPException(503,"Requests dependency unavailable")
-    scope=REGIONS.get(region,REGIONS["all-india"])
-    try:
-        return await osm_facilities.run_osm_ingestion(db, scope["bbox"])
-    except Exception as exc:
-        logger.exception("OSM ingestion failed")
-        raise HTTPException(502,f"OSM ingestion unavailable: {exc}")
-
-@api.post("/ingestion/reprocess")
-async def reprocess_anomalies(region: str = "all-india"):
-    bbox = REGIONS.get(region, REGIONS["all-india"])["bbox"]
-
-    docs = await db.anomalies.find(
-    {
-        "is_demo": False,
-        "source": {"$ne": "NASA FIRMS · historical"}
-    },
-    {"_id": 0}
-    ).to_list(5000)
-
-    docs = [
-        d for d in docs
-        if in_bbox(d.get("latitude", 0), d.get("longitude", 0), bbox)
-    ]
-
-    updated = 0
-    errors = 0
-
-    for doc in docs:
-        try:
-            raw = {
-                "observation_id": doc["observation_id"],
-                "latitude": doc["latitude"],
-                "longitude": doc["longitude"],
-                "acquisition_datetime": doc["acquisition_datetime"],
-                "acq_date": doc["acq_date"],
-                "acq_time": doc["acq_time"],
-                "frp": doc["frp"],
-                "confidence_raw": doc.get("confidence"),
-                "confidence_num": doc.get("confidence_num", 0.5),
-                "bright_ti4": doc.get("bright_ti4"),
-                "bright_ti5": doc.get("bright_ti5"),
-                "satellite": doc.get("satellite"),
-                "instrument": doc.get("instrument"),
-                "daynight": doc.get("daynight"),
-            }
-
-            processed = await firms_pipeline.process_observation(db, raw)
-
-            await db.anomalies.update_one(
-                {"observation_id": doc["observation_id"]},
-                {"$set": processed}
-            )
-
-            updated += 1
-
-        except Exception:
-            logger.exception(
-                "Failed to reprocess observation %s",
-                doc.get("observation_id")
-            )
-            errors += 1
-
-    return {
-        "status": "complete",
-        "processed": len(docs),
-        "updated": updated,
-        "errors": errors,
-        "facilities_used": await db.facilities.count_documents({"is_demo": False}),
-    }
+        await ensure_indexes()
+    except Exception as exc:  # pragma: no cover - startup must never hard-fail
+        logger.error("Index creation failed: %s", exc)
+    yield
+    await close_db()
 
 
-app.include_router(api)
+app = FastAPI(
+    title=settings.APP_NAME,
+    version=settings.APP_VERSION,
+    description="India-only thermal-event intelligence platform (Phase 2 foundation).",
+    lifespan=lifespan,
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-    "https://sih-thermointel-1.onrender.com",
-    "https://thermo-parentathon.onrender.com",
-    ],
     allow_credentials=True,
+    allow_origins=settings.CORS_ORIGINS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-@app.on_event("shutdown")
-async def shutdown():
-    await firms_scheduler.stop()
-    client.close()
+
+
+@app.get("/api/health")
+async def health():
+    database = "unavailable"
+    try:
+        await get_db().command("ping")
+        database = "connected"
+    except Exception as exc:
+        logger.warning("Mongo ping failed: %s", exc)
+
+    return {
+        "service": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "operational_scope": settings.OPERATIONAL_COUNTRY,
+        "database": database,
+        "phase": "Phase 2 - application foundation",
+    }
+
+
+app.include_router(api_router)

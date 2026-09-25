@@ -1,61 +1,121 @@
 {
-  "app_name": "ThermoIntel",
   "theme": "dark",
-  "archetype": "THE PERFORMANCE PRO / TACTICAL INDUSTRIAL COMMAND",
+  "archetype": "THE PERFORMANCE PRO + SWISS HIGH-CONTRAST",
   "typography": {
-    "headings": {
-      "font_family": "Barlow Condensed, sans-serif",
-      "weights": ["600", "700", "900"],
-      "letter_spacing": "tracking-tight"
+    "font_families": {
+      "heading": "IBM Plex Sans, sans-serif",
+      "body": "IBM Plex Sans, sans-serif",
+      "mono": "JetBrains Mono, monospace"
     },
-    "body": {
-      "font_family": "Inter, sans-serif",
-      "weights": ["400", "500", "600"]
-    },
-    "mono": {
-      "font_family": "JetBrains Mono, monospace"
+    "scales": {
+      "h1": "text-2xl font-bold tracking-tight",
+      "h2": "text-xl font-semibold tracking-tight",
+      "h3": "text-lg font-medium",
+      "body": "text-sm leading-relaxed",
+      "mono_data": "text-xs font-mono tracking-wider",
+      "labels": "text-[10px] font-bold uppercase tracking-[0.2em]"
     }
   },
   "colors": {
-    "background": "#090A0F",
-    "surface": "#12151E",
-    "surface_elevated": "#1A1F2C",
-    "border": "#2A3245",
-    "primary": "#FF3B30",
-    "primary_hover": "#FF5247",
-    "accent_blue": "#0A84FF",
-    "warning_amber": "#FF9F0A",
-    "success_green": "#30D158",
-    "text_main": "#F5F7FA",
-    "text_muted": "#8E9EAF"
-  },
-  "image_urls": [
-    {
-      "category": "industrial_hero_drone",
-      "url": "https://images.unsplash.com/photo-1569220809554-ea135cd2d537",
-      "description": "Aerial view of industrial terminal and refinery infrastructure at night"
+    "background": {
+      "app": "bg-slate-950",
+      "panel": "bg-slate-950/75"
     },
-    {
-      "category": "refinery_flare",
-      "url": "https://images.unsplash.com/photo-1566221857770-508d35ee6220",
-      "description": "Refinery plant with flare stack and night operations"
+    "text": {
+      "primary": "text-slate-50",
+      "secondary": "text-slate-400",
+      "muted": "text-slate-300",
+      "accent": "text-blue-400"
+    },
+    "borders": {
+      "panel": "border-slate-800/60",
+      "divider": "border-slate-800"
+    },
+    "event_classes": {
+      "industrial_fire": {
+        "color": "#FF3B30",
+        "description": "Red pin with ball/top, visually prominent, opaque"
+      },
+      "persistent_heat": {
+        "color": "#3B82F6",
+        "bg_class": "bg-blue-500/50",
+        "description": "Blue, translucent, soft/depth-like"
+      },
+      "agricultural_fire": {
+        "color": "#34D399",
+        "bg_class": "bg-emerald-400/50",
+        "description": "Light green, translucent, depth-like"
+      },
+      "forest_fire": {
+        "color": "#059669",
+        "bg_class": "bg-emerald-600/50",
+        "description": "Dark green, translucent, depth-like"
+      }
+    },
+    "threat_levels": {
+      "low": { "color": "#10B981", "class": "text-emerald-500" },
+      "moderate": { "color": "#F59E0B", "class": "text-amber-500" },
+      "high": { "color": "#EF4444", "class": "text-red-500" },
+      "critical": { "color": "#B91C1C", "class": "text-red-700 bg-red-500/20 pulse" }
     }
+  },
+  "surfaces_and_glass": {
+    "floating_panel": "backdrop-blur-xl bg-slate-950/70 border border-slate-800/50 shadow-[0_8px_32px_rgba(0,0,0,0.4)] rounded-md",
+    "filter_bar": "backdrop-blur-xl bg-slate-950/80 border border-slate-800/50 shadow-md rounded-md",
+    "demo_banner": "bg-amber-500 text-amber-950 font-mono font-bold text-xs py-1 px-4 tracking-widest uppercase flex justify-center items-center z-[100] w-full"
+  },
+  "layouts": {
+    "global": "h-screen w-screen overflow-hidden relative bg-slate-950",
+    "map_container": "absolute inset-0 z-0",
+    "ui_layer": "absolute inset-0 z-10 pointer-events-none flex flex-col",
+    "top_bar": "pointer-events-auto flex items-center justify-between p-4",
+    "side_panels": "pointer-events-auto w-80 lg:w-96 flex flex-col gap-4 h-full max-h-[calc(100vh-5rem)] overflow-y-auto custom-scrollbar p-4"
+  },
+  "components": {
+    "panels": {
+      "regional_overview": "Left-aligned floating panel. Default region INDIA. Shows Total Events, Agricultural Fire, Forest Fire, Persistent Heat Source, Industrial Fire counts, each with clear visual denotation.",
+      "priority_events": "Right-aligned floating panel. Top 5 highest-threat active events ranked by Threat Score and Alert Queue.",
+      "selected_event": "Right-aligned floating panel. Industry/source type, event type, threat level, model confidence, 'Why flagged / supporting evidence'. Replaces/overlays Priority Events."
+    },
+    "map_markers": "Cesium entities mapped to event_classes. INDUSTRIAL FIRE is a pin. OTHERS are translucent soft/depth-like elements (e.g., ellipses/cylinders with alpha).",
+    "filter_ui": "Top/floating search & filter UI: geography (States/UTs), classification, industrial/source subtype, time range (1h/6h/24h/1week)."
+  },
+  "motion": {
+    "panels": "transition-all duration-300 ease-in-out",
+    "markers": "pulse animation for CRITICAL threat level markers only",
+    "hover": "hover:bg-slate-800/50 transition-colors duration-200"
+  },
+  "general_ui_ux_guidelines": [
+    "The map is the primary canvas. Do not cover the entire screen with UI. Panels should be floating over the map.",
+    "Use 'IBM Plex Sans' for interface and 'JetBrains Mono' for numbers, coordinates, and data points.",
+    "Panels must be translucent (glassmorphism) so the map remains visible behind them.",
+    "Include empty/loading states for all panels. Empty states should feel intentional, not broken.",
+    "All interactive elements MUST include a data-testid attribute in kebab-case based on role (e.g., data-testid='filter-geography-dropdown').",
+    "Do NOT use transparent backgrounds for dropdowns or modals where content overlaps; use the panel glass background.",
+    "Keep animations restrained; this is a professional intelligence tool, not a consumer app.",
+    "Avoid generic SaaS UI elements like bright gradients or excessive border radii. Use sharp, technical UI components (rounded-md max).",
+    "Provide clear error/loading/empty states. 'DEMO DATA' indicator is explicitly required when mock data is used.",
+    "UI should feel like one continuous intelligence map, not three separate pages."
   ],
-  "components": [
-    "IndiaRegionSelector",
-    "FirmsIngestionPanel",
-    "OsmIndustrialContext",
-    "ThermalAnomalyMap",
-    "PersistentSourcesList",
-    "HistoricalActivityView",
-    "AnomalyStatusDashboard",
-    "TransparentPriorityScoreWidget",
-    "ExplainableClassificationCard",
-    "AlertsFeed",
-    "IngestionStatusMonitor",
-    "ModelStatusInspector",
-    "AnalystChatAssistant",
-    "DemoRealDataToggle"
+  "instructions_to_main_agent": [
+    "Set up Tailwind CSS with 'IBM Plex Sans' and 'JetBrains Mono' imported from Google Fonts.",
+    "Initialize a full-screen CesiumJS viewer focused on India. Try using Cesium Ion imagery if token is present, else fallback to OSM. Disable default Cesium UI widgets (timeline, geocoder, etc.).",
+    "Bundle a lightweight India states GeoJSON and load it into CesiumJS as a boundary overlay.",
+    "Implement the UI layout with an absolute positioned map at z-0, and absolute pointer-events-none UI layer at z-10.",
+    "Implement floating panels using Shadcn UI but customized with the specified glassmorphism CSS (backdrop-blur-xl bg-slate-950/70 border-slate-800/50). Remember to use pointer-events-auto on the panels.",
+    "Ensure 'DEMO DATA' banner is clearly labeled and visibly marked at the top when demo data is used.",
+    "Set up a local MongoDB integration in FastAPI backend.",
+    "Keep ML, real data ingestion, and final anomaly logic as clean API placeholders/interfaces.",
+    "Add 'data-testid' to all interactive UI components for testing.",
+    "Render the 4 map marker classes strictly according to the specs in event_classes (industrial fire is a red pin, others are soft/depth-like)."
   ],
-  "instructions_to_main_agent": "Build the complete runnable ThermoIntel web platform for industrial thermal intelligence in India with FastAPI backend and React frontend. Ensure all data models support MongoDB storage, FIRMS ingestion, OSM industrial context cross-matching, ML classification, persistence analysis, transparent priority scoring, and GPT-5.4 Analyst chat. Clearly badge DEMO DATA where real API keys are missing. Ensure high-density tactical command center UI styling without pure black/gray monotony."
+  "universal_guidelines_for_main_agent": [
+    "Do not converge toward generic outputs. Use layered design elements and glass-morphism.",
+    "Do not apply universal transition 'all'. Apply transitions to specific interactive elements.",
+    "Do not center align the app container. Preserve natural reading flow.",
+    "Use modern button styles relevant to the technical app style.",
+    "Never use AI assistant Emoji characters.",
+    "Every interaction needs micro-animations - hover states, focus states, etc.",
+    "Use Sonner for toasts."
+  ]
 }

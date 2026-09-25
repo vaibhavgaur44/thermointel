@@ -1,0 +1,42 @@
+{
+  "phase": "Phase 4 - ML Development",
+  "status": "final",
+  "feature_count_raw": 35,
+  "feature_count_encoded": 74,
+  "models": {
+    "M1": {
+      "model_file": "m1_model_final.joblib",
+      "task": "Agricultural vs Industrial",
+      "calibration": "sigmoid",
+      "threshold": 0.5
+    },
+    "M2": {
+      "model_file": "m2_model_final.joblib",
+      "task": "Agricultural Fire vs Forest Fire",
+      "calibration": "none"
+    },
+    "M3": {
+      "model_file": "m3_model_final.joblib",
+      "task": "Industrial Fire vs Persistent Source",
+      "calibration": "none",
+      "note": "Minority-class ground truth is sparse; no further optimization performed."
+    },
+    "M4": {
+      "model_file": "m4_model_final.joblib",
+      "task": "Persistent Industrial Source Classification",
+      "calibration": "sigmoid",
+      "note": "Class-specific ground-truth limitations remain."
+    }
+  },
+  "optimization": {
+    "class_imbalance": "controlled oversampling tested",
+    "leakage_audit": "completed",
+    "feature_ablation": "completed",
+    "xgboost_tuning": "completed",
+    "probability_calibration": "completed",
+    "threshold_optimization": "completed",
+    "m4_specific_improvement": "completed"
+  },
+  "preprocessing_file": "preprocessing_final.joblib",
+  "feature_schema_file": "feature_schema_final.json"
+}
