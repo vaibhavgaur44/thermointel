@@ -126,7 +126,7 @@ export const SelectedEventPanel = () => {
                   <EmptyState
                     testId="selected-event-evidence-empty"
                     title="No evidence recorded"
-                    detail="Supporting evidence is produced by the threat/anomaly engine, which is not yet implemented."
+                    detail="No abnormal threat signals were recorded for this event."
                   />
                 )}
               </div>
@@ -171,6 +171,21 @@ export const SelectedEventPanel = () => {
                   value={event.model_version_id}
                   testId="selected-event-model-version"
                 />
+                {event.lulc_2021_class != null && (
+                  <Field
+                    label="Land cover"
+                    value={event.lulc_2021_class}
+                    mono={false}
+                    testId="selected-event-lulc"
+                  />
+                )}
+                {event.nearest_facility_km != null && (
+                  <Field
+                    label="Nearest facility"
+                    value={`${event.nearest_facility_km.toFixed(2)} km`}
+                    testId="selected-event-facility"
+                  />
+                )}
               </div>
             </div>
           </div>

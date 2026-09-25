@@ -4,6 +4,7 @@ from typing import Optional
 from core.database import Collections, get_db
 from models.enums import EventStatus, EventType
 from models.event import Event, EventDetail, EventSummary, RegionalOverview
+from services import registry_service
 from services.filters import EventFilters
 
 SORT_FIELDS = {
@@ -41,7 +42,25 @@ async def get_event(event_id: str) -> Optional[EventDetail]:
     doc = await db[Collections.EVENTS].find_one({"event_id": event_id})
     if doc is None:
         return None
-    return EventDetail.from_event(Event.from_mongo(doc))
+    event = Event.from_mongo(doc)
+
+    # Join the primary detection for enrichment display (LULC / state_lgd)
+    # and the nearest-facility distance for facility context display.
+    detection_doc = None
+    facility_distance_km = None
+    if event.detection_ids:
+        detection_doc = await db[Collections.THERMAL_DETECTIONS].find_one(
+            {"observation_id": event.detection_ids[0]}
+        )
+    facility = None
+    if event.centroid is not None:
+        facility = await registry_service.nearest_facility(
+            event.centroid.latitude, event.centroid.longitude
+        )
+    if facility is not None:
+        facility_distance_km = facility.get("nearest_facility_km")
+
+    return EventDetail.from_event(event, detection_doc, facility_distance_km)
 
 
 async def priority_events(filters: EventFilters, limit: int = 5) -> list[EventSummary]:

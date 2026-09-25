@@ -2,6 +2,7 @@
 
 All filtering happens here (backend), never in React.
 """
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -48,7 +49,15 @@ class EventFilters:
                 "$in": [t.value for t in self.source_types]
             }
         if self.state:
-            query["state"] = self.state
+            # Case-insensitive match: production state values come from the
+            # SOI shapefile join (Phase 3), while the frontend sends names
+            # from the regions list. Compare case-insensitively so 'rajasthan'
+            # and 'Rajasthan' resolve to the same filtered set without
+            # rewriting stored production data.
+            query["state"] = {
+                "$regex": "^" + re.escape(self.state) + "$",
+                "$options": "i",
+            }
         if self.time_range is not None:
             cutoff = datetime.now(timezone.utc) - timedelta(
                 seconds=TIME_RANGE_SECONDS[self.time_range]

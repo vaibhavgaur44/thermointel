@@ -1,9 +1,4 @@
-"""Raw FIRMS observations.
-
-Rule (Phase 1, section 22): raw observations are NEVER overwritten with ML or
-frontend interpretation. Only ``event_id`` is written back, to record which
-ThermoIntel event a detection was grouped into.
-"""
+"""Raw FIRMS observations."""
 from datetime import datetime
 from typing import Optional
 
@@ -14,14 +9,15 @@ from models.enums import DayNight, Satellite
 
 
 class ThermalDetection(BaseDocument):
-    # Stable de-duplication key derived from satellite + acquisition + position.
     observation_id: str
 
     location: GeoPoint
     acquired_at: datetime
 
     satellite: Satellite = Satellite.OTHER
+    satellite_std: Optional[str] = None
     instrument: Optional[str] = None
+    version: Optional[str] = None
     day_night: Optional[DayNight] = None
 
     # FIRMS measurements, kept verbatim.
@@ -32,10 +28,13 @@ class ThermalDetection(BaseDocument):
     scan: Optional[float] = None
     track: Optional[float] = None
 
-    # Geographic assignment (India administrative boundaries).
+    # Geographic/context enrichment used by the frozen ML pipeline.
     state: Optional[str] = None
+    state_lgd: Optional[str] = None
+    lulc_2021_code: Optional[str] = None
+    lulc_2021_class: Optional[str] = None
 
-    # Event formation back-reference. None until event formation has run.
+    # Event formation back-reference.
     event_id: Optional[str] = None
 
     ingestion_run_id: Optional[str] = None

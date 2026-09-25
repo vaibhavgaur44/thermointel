@@ -22,6 +22,11 @@ python-jose>=3.3.0
 requests>=2.31.0
 pandas>=2.2.0
 numpy>=1.26.0
+# Phase 5 live enrichment (Phase 3 state/LULC methodology) — versions proven in the working environment
+shapely==2.1.2
+pyproj==3.7.2
+rasterio==1.4.4
+geopandas==1.1.4
 python-multipart>=0.0.9
 jq>=1.6.0
 typer>=0.9.0

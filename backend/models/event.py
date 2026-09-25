@@ -150,20 +150,31 @@ class EventDetail(EventSummary):
     mean_frp: Optional[float] = None
     spatial_extent_km2: Optional[float] = None
     facility_reference: Optional[str] = None
+    # Detection-level enrichment joined for the detail view (None when the
+    # detection lacks it). Additive display fields; Event model unchanged.
+    lulc_2021_code: Optional[str] = None
+    lulc_2021_class: Optional[str] = None
+    state_lgd: Optional[str] = None
+    nearest_facility_km: Optional[float] = None
     updated_at: datetime
 
     @classmethod
-    def from_event(cls, event: Event) -> "EventDetail":
+    def from_event(cls, event: Event, detection: Optional[dict] = None, facility_distance_km: Optional[float] = None) -> "EventDetail":
         base = EventSummary.from_event(event).model_dump()
+        detection = detection or {}
         return cls(
             **base,
             supporting_evidence=event.threat.supporting_evidence,
             model_version_id=event.classification.model_version_id,
             peak_frp=event.metrics.peak_frp,
-            latest_frp=event.metrics.latest_frp,
+            latest_frp = event.metrics.latest_frp,
             mean_frp=event.metrics.mean_frp,
             spatial_extent_km2=event.metrics.spatial_extent_km2,
             facility_reference=event.facility_reference,
+            lulc_2021_code=detection.get("lulc_2021_code"),
+            lulc_2021_class=detection.get("lulc_2021_class"),
+            state_lgd=detection.get("state_lgd"),
+            nearest_facility_km=facility_distance_km,
             updated_at=event.updated_at,
         )
 

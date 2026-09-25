@@ -66,9 +66,18 @@ async def ensure_indexes() -> None:
     await db[Collections.EVENTS].create_index([("last_detected", DESCENDING)])
     await db[Collections.EVENTS].create_index([("data_origin", ASCENDING)])
 
+    # Unique per facility_id. Partial on the presence of facility_id: the
+    # collection also contains legacy OSM-ingest documents identified only by
+    # osm_id (no facility_id). Without the partial filter those documents all
+    # carry an implicit null key and MongoDB refuses to build the unique
+    # index, which previously aborted ensure_indexes() and silently left the
+    # facilities 2dsphere index (and every later index) uncreated.
     await db[Collections.FACILITIES].create_index(
-        [("facility_id", ASCENDING)], unique=True
+        [("facility_id", ASCENDING)],
+        unique=True,
+        partialFilterExpression={"facility_id": {"$exists": True}},
     )
+    # Geospatial index backing nearest_facility() lookups.
     await db[Collections.FACILITIES].create_index([("location", GEOSPHERE)])
     await db[Collections.FACILITIES].create_index([("state", ASCENDING)])
     await db[Collections.FACILITIES].create_index([("source_type", ASCENDING)])

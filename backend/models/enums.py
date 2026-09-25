@@ -116,6 +116,8 @@ class IngestionStatus(str, Enum):
     PENDING = "PENDING"
     RUNNING = "RUNNING"
     SUCCEEDED = "SUCCEEDED"
+    # Completed, but some FIRMS sources failed and/or returned no data.
+    PARTIAL = "PARTIAL"
     FAILED = "FAILED"
     NOT_IMPLEMENTED = "NOT_IMPLEMENTED"
 

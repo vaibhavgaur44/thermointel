@@ -44,6 +44,38 @@ can present as `PERSISTENT_HEAT_SOURCE` on one day and `INDUSTRIAL_FIRE` on
 another. Nothing in this codebase maps one onto the other; `facility_reference`
 is a link for future feature engineering only.
 
+## Frozen Phase 4 model artifacts and known training-data limitations
+
+The deployed model stack (M1 → M2 → M3 → M4) and its preprocessing artifact
+are **frozen** (Phase 4). They are used read-only at Phase 5 inference time:
+nothing re-trains, re-fits or modifies them. Key files live in
+`backend/models/ml/` (`preprocessing_final.joblib`, `m1..m4_model_final.joblib`,
+`*_class_mapping_final.json`, `feature_schema_final.json`).
+
+Known limitations of the Phase 4 training data (documented by the Phase 4
+metadata and preserved verbatim in `models/ml/model_metadata_final.json`):
+
+* **Minority-class ground truth is sparse.** M3 and M4 carry the explicit
+  notes "Minority-class ground truth is sparse; no further optimization
+  performed" and "Class-specific ground-truth limitations remain".
+* **Persistent-source subtypes are imperfectly separable.** With the current
+  production distribution (severity concentrated on
+  `PERSISTENT_HEAT_SOURCE`), the M4 source-type prediction is much weaker
+  evidence than the M1/M2/M3 event-type prediction. The provisional threat
+  engine reflects this by weighting `source_type` evidence below `event_type`
+  evidence (`pipeline/threat_engine.py`).
+* **Class imbalance was handled with controlled oversampling only.** No
+  synthetic minority data was invented; the frozen models must not be assumed
+  to be calibrated for rare classes.
+* **Numeric confidence columns are almost always missing at inference.**
+  `confidence` / `confidence_num` were sparse in training too, so the frozen
+  preprocessing imputes them; this is expected behaviour, not a defect.
+
+These limitations are properties of the frozen artifacts. They are **not**
+fixable at Phase 5 without retraining, which is explicitly out of scope; the
+model is used as-is and the UI surfaces confidence honestly rather than
+hiding the limitation.
+
 ## Deliberately unfrozen configuration
 
 | Object                                   | Fields left `None`                                      |
