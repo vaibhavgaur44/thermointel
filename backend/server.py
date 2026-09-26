@@ -40,7 +40,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=settings.CORS_ORIGINS,
+    # Explicit origin allow-list (never "*"). The deployed frontend and
+    # localhost dev origins are guaranteed so a bad/missing CORS_ORIGINS env
+    # value cannot lock the dashboard out again.
+    allow_origins=settings.required_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )

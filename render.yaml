@@ -12,6 +12,9 @@ services:
         sync: false
       - key: DB_NAME
         sync: false
+      # Comma-separated origins, no trailing slashes, no spaces needed.
+      # Must include: https://thermointel-7qm6.onrender.com,http://localhost:3000
+      # (code also guarantees these two even if this env var is wrong).
       - key: CORS_ORIGINS
         sync: false
       - key: FIRMS_API_KEY
