@@ -113,10 +113,11 @@ async def run_ingestion(
             )
         )
 
-        # 2. Event formation
+        # 2. Event formation (expiry runs after the final persist below,
+        # otherwise persist_events would $set status back to ACTIVE and
+        # clobber the EXPIRED transitions)
         events = await event_formation.group_detections(detections)
         event_inserted = await event_formation.persist_events(events)
-        expired = await event_formation.expire_stale_events()
 
         stages.append(
             StageResult(
@@ -124,9 +125,7 @@ async def run_ingestion(
                 status=IngestionStatus.SUCCEEDED,
                 message=(
                     f"Formed {len(events)} production events; "
-                    f"persisted {event_inserted}; "
-                    f"{expired} expired (window: "
-                    f"{event_formation.CONFIG.expiry_window_hours}h)."
+                    f"persisted {event_inserted}."
                 ),
             )
         )
@@ -201,6 +200,17 @@ async def run_ingestion(
                 assessed += 1
 
         await event_formation.persist_events(events)
+
+        # Lifecycle expiry AFTER the final persist so persisted ACTIVE
+        # statuses cannot overwrite EXPIRED transitions (order matters).
+        expired = await event_formation.expire_stale_events()
+        for stage in stages:
+            if stage.stage is PipelineStage.EVENT_FORMATION:
+                stage.message += (
+                    f" {expired} expired (window: "
+                    f"{event_formation.CONFIG.expiry_window_hours}h)."
+                )
+                break
 
         # 5. Alert generation (owner eligibility contract + duplicate
         # suppression; see pipeline/threat_engine.py).
