@@ -1,4 +1,4 @@
-import { Activity, Globe2, Layers, Radio } from "lucide-react";
+import { Activity, Globe2, Layers } from "lucide-react";
 import {
   Popover,
   PopoverContent,
@@ -16,36 +16,6 @@ const BASEMAPS = [
 
 const PILL =
   "flex items-center gap-1.5 rounded-sm px-2.5 py-1.5 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] transition-colors duration-200";
-
-const ViewModeToggle = () => {
-  const { filters, setViewMode } = useDashboard();
-  return (
-    <div
-      className="flex items-center overflow-hidden rounded-sm border border-slate-700/60"
-      data-testid="view-mode-toggle"
-    >
-      {[
-        { value: "LIVE", label: "Live" },
-        { value: "HISTORICAL", label: "Historical" },
-      ].map((mode) => (
-        <button
-          key={mode.value}
-          type="button"
-          data-testid={`view-mode-${mode.value.toLowerCase()}`}
-          onClick={() => setViewMode(mode.value)}
-          className={`${PILL} ${
-            filters.viewMode === mode.value
-              ? "bg-emerald-400/15 text-emerald-300"
-              : "text-slate-400 hover:bg-slate-700/40 hover:text-slate-200"
-          }`}
-        >
-          {mode.value === "LIVE" && <Radio className="h-3 w-3" />}
-          {mode.label}
-        </button>
-      ))}
-    </div>
-  );
-};
 
 const BasemapSelector = () => {
   const { basemap, setBasemap } = useDashboard();
@@ -191,7 +161,6 @@ export const TopBar = () => (
       </div>
     </div>
     <div className="flex items-center gap-2">
-      <ViewModeToggle />
       <PipelineStatus />
       <BasemapSelector />
       <MapModeToggle />
