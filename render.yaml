@@ -26,6 +26,35 @@ services:
       - key: ALLOW_DEMO_DATA
         value: "false"
 
+  # Scheduled production trigger for the Phase 5 pipeline (POST
+  # /api/ingestion/run equivalent via backend/scripts/run_ingestion.py).
+  # Runs the full FIRMS -> enrichment -> events -> ML -> threat -> alerts
+  # pipeline on the SAME code path as the manual endpoint. Schedule is UTC
+  # (every 2 hours, offset from the hour); env vars are synced from the
+  # existing services' values in the Render dashboard (Blueprint sync does
+  # not copy them automatically).
+  - type: cron
+    name: thermointel-pipeline-cron
+    runtime: python
+    rootDir: backend
+    plan: 1c-2g
+    buildCommand: pip install -r requirements.txt
+    startCommand: python scripts/run_ingestion.py
+    schedule: "10 */2 * * *"
+    envVars:
+      - key: MONGO_URL
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: FIRMS_API_KEY
+        sync: false
+      - key: FIRMS_BASE_URL
+        sync: false
+      - key: ACTIVE_MODEL_VERSION
+        sync: false
+      - key: ALLOW_DEMO_DATA
+        value: "false"
+
   - type: web
     name: thermointel-web
     runtime: static
