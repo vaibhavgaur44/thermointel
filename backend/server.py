@@ -12,6 +12,7 @@ from starlette.middleware.cors import CORSMiddleware
 from api.router import api_router
 from core.config import settings
 from core.database import close_db, ensure_indexes, get_db
+from services.startup_catchup import cancel_catchup, maybe_trigger_startup_catchup
 
 logging.basicConfig(
     level=logging.INFO,
@@ -26,7 +27,15 @@ async def lifespan(_: FastAPI):
         await ensure_indexes()
     except Exception as exc:  # pragma: no cover - startup must never hard-fail
         logger.error("Index creation failed: %s", exc)
+    # Startup freshness/catch-up: non-blocking (fast Mongo read here; the
+    # ingestion itself runs in a background task - see
+    # services/startup_catchup.py). Must never prevent app startup.
+    try:
+        await maybe_trigger_startup_catchup()
+    except Exception as exc:  # pragma: no cover - startup must never hard-fail
+        logger.error("Startup catch-up check failed: %s", exc)
     yield
+    await cancel_catchup()
     await close_db()
 
 
@@ -40,7 +49,10 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=settings.CORS_ORIGINS,
+    # Explicit origin allow-list (never "*"). The deployed frontend and
+    # localhost dev origins are guaranteed so a bad/missing CORS_ORIGINS env
+    # value cannot lock the dashboard out again.
+    allow_origins=settings.required_cors_origins(),
     allow_methods=["*"],
     allow_headers=["*"],
 )

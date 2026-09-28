@@ -8,8 +8,6 @@ const INITIAL_FILTERS = {
   classifications: [],
   sourceTypes: [],
   timeRange: "24h",
-  // LIVE shows only ACTIVE events; HISTORICAL includes inactive/expired records.
-  viewMode: "LIVE",
 };
 
 export const DashboardProvider = ({ children }) => {
@@ -47,10 +45,6 @@ export const DashboardProvider = ({ children }) => {
     setFilters((prev) => ({ ...prev, timeRange }));
   }, []);
 
-  const setViewMode = useCallback((viewMode) => {
-    setFilters((prev) => ({ ...prev, viewMode }));
-  }, []);
-
   const resetFilters = useCallback(() => {
     setFilters(INITIAL_FILTERS);
     setSelectedEventId(null);
@@ -66,7 +60,7 @@ export const DashboardProvider = ({ children }) => {
   /** Query params consumed by the API layer. */
   const queryFilters = useMemo(
     () => ({
-      status: filters.viewMode === "LIVE" ? "ACTIVE" : undefined,
+      status: "ACTIVE",
       state: filters.region?.name,
       timeRange: filters.timeRange,
       classifications: filters.classifications,
@@ -89,7 +83,6 @@ export const DashboardProvider = ({ children }) => {
     toggleClassification,
     toggleSourceType,
     setTimeRange,
-    setViewMode,
     resetFilters,
     selectEvent,
     clearSelection,
@@ -110,7 +103,6 @@ export const DashboardProvider = ({ children }) => {
     toggleClassification,
     toggleSourceType,
     setTimeRange,
-    setViewMode,
     resetFilters,
     selectEvent,
     clearSelection,

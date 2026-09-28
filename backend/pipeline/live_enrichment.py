@@ -24,9 +24,13 @@ Preserved invariants:
     most once per process and reused across batches.
 
 Source of record:
-  - Boundaries: SIH_DATASETS/data/raw/boundaries/soi_states/SOI_States.shp
-    (Survey of India states/UTs, EPSG:4326, STATE + State_LGD columns).
-  - LULC: ESA WorldCover 10m 2021 v200, CC BY 4.0 (static 2021 snapshot).
+  - Boundaries: backend/data/reference/SOI_States.shp (Survey of India
+    states/UTs, EPSG:4326, STATE + State_LGD columns). The shapefile is
+    PACKAGED with the backend so local and deployed environments enrich
+    identically; the Phase 3 working copy under SIH_DATASETS is only a
+    local fallback.
+  - LULC: ESA WorldCover 10m 2021 v200, CC BY 4.0 (static 2021 snapshot,
+    public COG bucket - no local file dependency).
 """
 
 import math
@@ -37,9 +41,22 @@ from typing import Optional
 from models.enums import DayNight, Satellite  # noqa: F401  (schema parity)
 
 STANDARDIZED_DIR = r"D:\SIH2026\SIH_DATASETS\data\standardized"
-BOUNDARY_SHP = Path(
+
+# Backend root (.../backend on any OS). The SOI boundary shapefile ships
+# inside the repository so deployments without the D:\ SIH_DATASETS working
+# copy (e.g. Render Linux) still enrich state/LGD identically to local runs.
+BACKEND_DIR = Path(__file__).resolve().parent.parent
+BOUNDARY_SHP = BACKEND_DIR / "data" / "reference" / "SOI_States.shp"
+_LOCAL_PHASE3_SHP = Path(
     r"D:\SIH2026\SIH_DATASETS\data\raw\boundaries\soi_states\SOI_States.shp"
 )
+
+
+def resolve_boundary_shp() -> Path:
+    """Packaged SOI shapefile when present, else the Phase 3 working copy."""
+    if BOUNDARY_SHP.exists():
+        return BOUNDARY_SHP
+    return _LOCAL_PHASE3_SHP
 
 # ESA WorldCover 10m 2021 v200 public COG bucket (same as Phase 3 tooling).
 WORLDCOVER_S3_BASE = (
@@ -100,8 +117,10 @@ class LiveEnricher:
     per ingestion run.
     """
 
-    def __init__(self, boundary_shp: Path = BOUNDARY_SHP, lulc_enabled: bool = True):
-        self._boundary_shp = Path(boundary_shp)
+    def __init__(self, boundary_shp: Optional[Path] = None, lulc_enabled: bool = True):
+        # Default resolves at CONSTRUCTION time (deploy-safe: packaged
+        # reference data first, Phase 3 working copy as local fallback).
+        self._boundary_shp = Path(boundary_shp) if boundary_shp else Path(resolve_boundary_shp())
         self._lulc_enabled = lulc_enabled
         self._states_loaded = False
         self._geoms = None

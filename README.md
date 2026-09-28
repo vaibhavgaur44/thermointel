@@ -182,7 +182,7 @@ observations, model predictions or threat assessments.
 
 ## Deployment (Render + MongoDB Atlas)
 
-`render.yaml` describes both services.
+`render.yaml` describes the web services and the pipeline cron job.
 
 1. Create a free MongoDB Atlas cluster, a fresh v2 database, and a database
    user. Allow Render's egress IPs (or `0.0.0.0/0` for a student project).
@@ -192,7 +192,21 @@ observations, model predictions or threat assessments.
    `REACT_APP_BACKEND_URL` (frontend).
 4. Deploy. Indexes are created automatically on backend startup.
 
-Nothing here requires paid infrastructure.
+### Automatic pipeline scheduling (Render Cron Job)
+
+`render.yaml` declares `thermointel-pipeline-cron` (`type: cron`, every
+2 hours at :10 UTC). Each run executes `backend/scripts/run_ingestion.py`,
+which calls the SAME pipeline implementation as `POST /api/ingestion/run`
+(real NASA FIRMS ingestion, enrichment, events, ML inference, threat scoring
+and alerts; `triggered_by="render-cron"`; idempotent upserts; no demo data).
+The cron service needs `MONGO_URL`, `DB_NAME`, `FIRMS_API_KEY`,
+`FIRMS_BASE_URL` and `ACTIVE_MODEL_VERSION` set in the Render dashboard
+(Blueprint sync does not copy env vars between services).
+
+Note: Render bills cron jobs a minimum of $1/month (per-service, regardless
+of schedule). Run history and logs appear on the cron service's **Runs** page.
+
+Nothing here requires paid infrastructure for the web services.
 
 ---
 

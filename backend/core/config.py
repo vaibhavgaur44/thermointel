@@ -19,7 +19,16 @@ class Settings:
     DB_NAME = os.environ["DB_NAME"]
 
     # --- HTTP ---
-    CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+    # Trailing slashes and stray whitespace around commas are the usual
+    # reason an allow-list entry stops matching the browser's exact Origin
+    # header, so both are normalized away during parsing.
+    CORS_ORIGINS = [
+        origin
+        for origin in (
+            part.strip().rstrip("/") for part in os.environ.get("CORS_ORIGINS", "*").split(",")
+        )
+        if origin
+    ]
 
     # --- Operational scope ---
     OPERATIONAL_COUNTRY = "India"
@@ -37,6 +46,20 @@ class Settings:
     @property
     def firms_configured(self) -> bool:
         return bool(self.FIRMS_API_KEY and self.FIRMS_BASE_URL)
+
+    def required_cors_origins(self) -> list[str]:
+        """Origins the deployed frontend and local dev require, merged with
+        the parsed CORS_ORIGINS env value. Duplicates removed, order kept."""
+        required = [
+            "https://thermointel-7qm6.onrender.com",
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ]
+        merged = required + [o for o in self.CORS_ORIGINS if o not in required]
+        # "*" would be dropped by Starlette when allow_credentials=True
+        # (starlette/http.py rejects the header combination), so keep the
+        # allow-list explicit.
+        return [o for o in merged if o != "*"]
 
 
 settings = Settings()
