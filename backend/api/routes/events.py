@@ -61,7 +61,11 @@ async def get_priority_events(
 
 @router.get("", response_model=dict)
 async def get_events(
-    status: Optional[EventStatus] = EventStatus.ACTIVE,
+    # Default is ALL statuses: the events list is the exploratory table, so
+    # omitting `status` must not silently hide EXPIRED/INACTIVE history
+    # (unlike /summary, which scopes to ACTIVE by default, and /priority,
+    # which is ACTIVE-only by design).
+    status: Optional[EventStatus] = None,
     classification: list[EventType] = Query(default=[]),
     source_type: list[SourceType] = Query(default=[]),
     state: Optional[str] = Query(None),

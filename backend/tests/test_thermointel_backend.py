@@ -201,6 +201,49 @@ class TestThermoIntelPhase2:
             r = requests.get(f"{API}/events", params={"include_demo": "true", "time_range": tr}, timeout=TIMEOUT)
             assert r.status_code == 200, f"time_range {tr} failed with {r.status_code}"
 
+    def test_19b_default_status_includes_expired_in_1w(self):
+        """Regression: omitting `status` on GET /events must not hide EXPIRED events.
+
+        The events list is the exploratory table, so its default is ALL
+        statuses: with time_range=1w the default total must equal the sum of
+        the per-status totals (ACTIVE + EXPIRED + INACTIVE). Under the old
+        ACTIVE default the identity broke whenever EXPIRED events existed
+        inside the 7-day last_detected window. Short windows use the same
+        partition identity, which holds regardless of what data is present.
+        /summary stays ACTIVE-scoped by default and /priority stays
+        explicitly ACTIVE-only. Production data only (no demo dependency).
+        """
+        params = {"time_range": "1w", "limit": 2000}
+        wk = requests.get(f"{API}/events", params=params, timeout=TIMEOUT).json()
+        parts = 0
+        for st in ("ACTIVE", "EXPIRED", "INACTIVE"):
+            r = requests.get(f"{API}/events", params={**params, "status": st}, timeout=TIMEOUT).json()
+            parts += r.get("total", 0)
+            if st == "EXPIRED" and r.get("total", 0) > 0:
+                statuses = {it.get("status") for it in _items(wk)}
+                assert "EXPIRED" in statuses, "1w default view must include EXPIRED events"
+        assert wk.get("total") == parts, (
+            "default (no status) 1w total must equal ACTIVE+EXPIRED+INACTIVE"
+        )
+
+        # Short windows: same identity; default never diverges from the
+        # union of explicit statuses there.
+        for tr in ("1h", "6h", "24h"):
+            d = requests.get(f"{API}/events", params={"time_range": tr, "limit": 2000}, timeout=TIMEOUT).json()
+            s = sum(
+                requests.get(
+                    f"{API}/events", params={"time_range": tr, "limit": 2000, "status": st}, timeout=TIMEOUT
+                ).json().get("total", 0)
+                for st in ("ACTIVE", "EXPIRED", "INACTIVE")
+            )
+            assert d.get("total") == s, f"{tr}: default total must equal the union of statuses"
+
+        # /summary stays ACTIVE by default; /priority stays explicitly ACTIVE-only.
+        s = requests.get(f"{API}/events/summary", timeout=TIMEOUT).json()
+        assert s.get("status_scope") == "ACTIVE"
+        pr = requests.get(f"{API}/events/priority", params={"limit": 50}, timeout=TIMEOUT).json()
+        assert _items(pr) and all(it.get("status") == "ACTIVE" for it in _items(pr))
+
     # ----- 8. Event detail + honesty -----
     def test_20_event_detail(self):
         r = requests.get(f"{API}/events/demo-evt-001", timeout=TIMEOUT)
