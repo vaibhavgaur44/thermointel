@@ -51,6 +51,22 @@ export const thermoIntelApi = {
   runIngestion: async (windowHours = 24) =>
     (await apiClient.post(`/ingestion/run?window_hours=${windowHours}`)).data,
 
+  // Reprocess EXISTING stored production records with the CURRENT installed
+  // M1 via the backend's existing inference path. No FIRMS data is fetched;
+  // nothing is inserted or deleted. The dashboard Refresh button triggers
+  // this explicit manual operation. Long-running: override the client's
+  // default 20s timeout for this request only.
+  reprocessExistingData: async (limit) =>
+    (
+      await apiClient.post(
+        limit
+          ? `/reprocess/existing-data?limit=${limit}`
+          : "/reprocess/existing-data",
+        null,
+        { timeout: 300000 },
+      )
+    ).data,
+
   models: async () => (await apiClient.get("/models")).data,
 
   demoDataStatus: async () => (await apiClient.get("/dev/demo-data/status")).data,

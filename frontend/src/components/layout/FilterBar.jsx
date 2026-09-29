@@ -1,4 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, Filter, RotateCcw } from "lucide-react";
+import { useState } from "react";
 
 import {
   Popover,
@@ -11,6 +13,7 @@ import {
   TIME_RANGES,
   eventTypeMeta,
 } from "@/constants/taxonomy";
+import { thermoIntelApi } from "@/api/thermointel";
 import { useRegions } from "@/hooks/useThermoIntel";
 import { useDashboard } from "@/state/DashboardContext";
 
@@ -130,7 +133,7 @@ const SourceTypeFilter = () => {
               type="button"
               data-testid={`filter-source-type-${value.toLowerCase()}`}
               onClick={() => toggleSourceType(value)}
-              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-[12px] transition-colors duration-150 hover:bg-sky-400/10"
+              className="flex w-full items-center justify-between rounded-sm px-2 py-1.5 text-left text-[12px] transition-colors duration-150 hover:bg-sky-400/10"
             >
               <span
                 className={`flex h-3 w-3 shrink-0 items-center justify-center rounded-[2px] border ${
@@ -176,8 +179,73 @@ const TimeRangeFilter = () => {
   );
 };
 
+/**
+ * Existing Refresh button (previously a filter reset), repurposed as the
+ * manual existing-data reprocessing trigger. Re-runs the CURRENT installed
+ * M1 over already-stored production records via POST
+ * /api/reprocess/existing-data (no new FIRMS data is fetched, nothing is
+ * inserted or deleted), then refreshes the dashboard's react-query caches.
+ * The selected time range is preserved: invalidation refetches with the
+ * same active filters.
+ */
+const RefreshButton = () => {
+  const queryClient = useQueryClient();
+  const [running, setRunning] = useState(false);
+  const [status, setStatus] = useState(null); // null | {kind, text}
+
+  const handleClick = async () => {
+    if (running) return;
+    setRunning(true);
+    setStatus(null);
+    try {
+      const result = await thermoIntelApi.reprocessExistingData();
+      const ok = result.status === "SUCCEEDED";
+      setStatus({
+        kind: ok ? "success" : "error",
+        text: ok
+          ? `Updated ${result.updated} events`
+          : `${result.status}: ${result.failure_reasons?.[0] || "see backend logs"}`,
+      });
+      // Refetch the dashboard data for the CURRENT filters (time range
+      // preserved). Scoped to data queries - regions/status are untouched.
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["map-events"] }),
+        queryClient.invalidateQueries({ queryKey: ["regional-overview"] }),
+        queryClient.invalidateQueries({ queryKey: ["priority-events"] }),
+        queryClient.invalidateQueries({ queryKey: ["alerts"] }),
+        queryClient.invalidateQueries({ queryKey: ["event"] }),
+      ]);
+    } catch (err) {
+      setStatus({ kind: "error", text: err?.message || "Reprocess failed" });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      data-testid="filter-reset-button"
+      onClick={handleClick}
+      disabled={running}
+      title={status ? status.text : "Reprocess existing data with the current model"}
+      aria-label="Refresh existing-data classifications"
+      className={`ml-1 rounded-sm p-1.5 text-slate-300 transition-colors duration-200 hover:bg-slate-700/40 hover:text-slate-200 ${
+        running ? "animate-spin" : ""
+      } ${
+        status?.kind === "error"
+          ? "text-red-400"
+          : status?.kind === "success"
+            ? "text-emerald-400"
+            : ""
+      }`}
+    >
+      <RotateCcw className="h-3.5 w-3.5" />
+    </button>
+  );
+};
+
 export const FilterBar = () => {
-  const { resetFilters } = useDashboard();
   return (
     <div className={BAR} data-testid="filter-bar">
       <Filter className="mx-1.5 h-3.5 w-3.5 shrink-0 text-slate-300" />
@@ -188,15 +256,7 @@ export const FilterBar = () => {
       <SourceTypeFilter />
       <span className="h-5 w-px bg-slate-700/60" />
       <TimeRangeFilter />
-      <button
-        type="button"
-        data-testid="filter-reset-button"
-        onClick={resetFilters}
-        className="ml-1 rounded-sm p-1.5 text-slate-300 transition-colors duration-200 hover:bg-slate-700/40 hover:text-slate-200"
-        aria-label="Reset filters"
-      >
-        <RotateCcw className="h-3.5 w-3.5" />
-      </button>
+      <RefreshButton />
     </div>
   );
 };
