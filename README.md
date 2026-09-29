@@ -1,224 +1,583 @@
-# ThermoIntel v2 — Phase 2 Foundation
+# ThermoIntel
 
-India-only thermal-event intelligence platform. NASA FIRMS reports a thermal
-signal; ThermoIntel determines what likely produced it, whether it is
-normal or abnormal, and whether it represents a threat.
+ThermoIntel is an AI-powered geospatial intelligence platform for monitoring satellite-derived thermal anomalies across India.
 
-**This repository is the Phase 2 application foundation.** The Cesium globe,
-the floating intelligence panels, the API surface and the MongoDB schemas are
-complete. Ingestion, event formation, feature engineering, ML inference, the
-threat/anomaly engine and alert generation are declared as interfaces and
-raise `PipelineStageNotImplemented` — nothing is simulated.
+It takes thermal observations from NASA FIRMS, enriches them with geographic and historical context, classifies their likely source using machine learning, and presents the resulting information through an interactive web dashboard.
 
----
+The idea is simple: a satellite hotspot by itself does not tell you much. ThermoIntel tries to answer what the hotspot is likely to represent, whether the activity is recurring, whether it is close to an industrial facility, and whether it deserves further attention.
 
-## Stack
+The overall workflow is:
 
-| Layer    | Technology                                  |
-| -------- | ------------------------------------------- |
-| Frontend | React 19, CesiumJS (CDN), Tailwind, shadcn/ui |
-| Backend  | Python, FastAPI, Motor                      |
-| Database | MongoDB Atlas (any MongoDB 5+)              |
-| Hosting  | Render (frontend + backend), GitHub         |
+NASA FIRMS
+→ Thermal Detection
+→ Contextual Enrichment
+→ Feature Engineering
+→ ML Classification
+→ Anomaly Analysis
+→ Priority Scoring
+→ MongoDB
+→ FastAPI
+→ Web Dashboard
 
----
 
-## Project structure
+## What ThermoIntel Does
 
-```
-backend/
-  server.py                  FastAPI entry point (/api/health + router)
-  core/
-    config.py                Environment-driven settings
-    database.py              Motor client, collection names, index creation
-  models/
-    enums.py                 Frozen Phase 1 taxonomy (event types, source types,
-                             threat levels, statuses, evidence codes)
-    common.py                PyObjectId, BaseDocument, GeoPoint
-    detection.py             thermal_detections   (raw FIRMS observations)
-    event.py                 events               (primary operational dataset)
-    facility.py              facilities           (India facility intelligence)
-    ground_truth.py          ground_truth         (verified labels)
-    alert.py                 alerts               (threat-threshold outcomes)
-    ingestion_run.py         ingestion_runs       (pipeline execution history)
-    model_version.py         model_versions       (versions, features, metrics)
-  services/
-    filters.py               Query-filter construction (all filtering is backend)
-    event_service.py         Event reads, priority ranking, regional counts
-    registry_service.py      Alerts, facilities, detections, runs, models
-  pipeline/
-    base.py                  PipelineStageNotImplemented
-    firms_ingestion.py       Stage 1  (Phase 3/5)
-    event_formation.py       Stage 2  (Phase 5) - unfrozen grouping config
-    feature_engineering.py   Stage 3  (Phase 4) - feature GROUPS only
-    ml_inference.py          Stage 4  (Phase 4/5) - hierarchical model stack
-    threat_engine.py         Stage 5+6 (Phase 4/5) - unfrozen weights/threshold
-  api/
-    router.py                Aggregates every /api route group
-    routes/                  events, alerts, data, ingestion, models,
-                             reference, dev
-  data/india_regions.py      States + Union Territories (no districts)
-  dev/demo_dataset.py        Clearly labelled DEMO dataset (isolated)
+ThermoIntel works with satellite-derived thermal observations rather than satellite images.
 
-frontend/src/
-  api/                       client.js (axios) + thermointel.js (contracts)
-  state/DashboardContext.jsx Filters, region, selection, demo mode
-  hooks/useThermoIntel.js    React Query data hooks
-  constants/taxonomy.js      Labels + marker colours (presentation only)
-  lib/cesiumLoader.js        Waits for the CDN Cesium bundle
-  map/
-    viewer.js                Viewer creation, basemap stacks, camera helpers
-    markerImages.js          Canvas marker artwork (pin + soft field markers)
-    eventLayer.js            Event entities and picking
-    boundaryLayer.js         India state/UT overlay + region picking
-  components/
-    map/GlobeCanvas.jsx      Globe orchestration
-    layout/                  TopBar, FilterBar
-    panels/                  RegionalOverview, PriorityEvents, AlertQueue,
-                             SelectedEvent
-    common/                  Panel, PanelStates, Indicators
-  pages/Dashboard.jsx        Single continuous intelligence map
-  public/geo/india_states.geojson  Simplified state/UT boundaries (78 KB)
-```
+For every observation, the system can use information such as:
 
-The frontend contains **no** classification, threat or anomaly logic.
+- Location
+- Acquisition time
+- Fire Radiative Power (FRP)
+- Brightness temperature
+- Satellite and instrument
+- Detection confidence
+- Day/night information
+- Land-use context
+- State/UT information
+- Historical thermal activity
+- Nearby industrial facilities
 
----
+The resulting information is used to classify and prioritize thermal events.
 
-## Local development
+The system is designed primarily as a decision-support and monitoring platform. A FIRMS detection is a satellite-detected thermal anomaly; it is not automatically proof of a fire, and proximity to an industrial facility does not by itself prove causation.
 
-```bash
-# Backend
-cd backend
-cp .env.example .env          # set MONGO_URL + DB_NAME
-pip install -r requirements.txt
-uvicorn server:app --host 0.0.0.0 --port 8001 --reload
 
-# Frontend
-cd frontend
-cp .env.example .env          # set REACT_APP_BACKEND_URL
-yarn install
-yarn start
-```
+## Classification
 
-### Environment variables
+ThermoIntel uses a hierarchical machine-learning approach.
 
-Backend (`backend/.env`):
+### M1 — Agricultural vs Industrial
 
-| Variable               | Required | Notes                                        |
-| ---------------------- | -------- | -------------------------------------------- |
-| `MONGO_URL`            | yes      | MongoDB Atlas connection string              |
-| `DB_NAME`              | yes      | Fresh v2 database, e.g. `thermointel_v2`     |
-| `CORS_ORIGINS`         | no       | Comma-separated origins, defaults to `*`     |
-| `FIRMS_API_KEY`        | no       | Phase 3/5. Empty in Phase 2                  |
-| `FIRMS_BASE_URL`       | no       | Phase 3/5. Empty in Phase 2                  |
-| `ACTIVE_MODEL_VERSION` | no       | Phase 4/5. Empty in Phase 2                  |
-| `ALLOW_DEMO_DATA`      | no       | `false` disables the DEMO endpoints entirely |
+The first classification separates thermal activity into:
 
-Frontend (`frontend/.env`):
+- AGRICULTURAL
+- INDUSTRIAL
 
-| Variable                      | Required | Notes                                              |
-| ----------------------------- | -------- | -------------------------------------------------- |
-| `REACT_APP_BACKEND_URL`       | yes      | Backend base URL, no trailing slash                |
-| `REACT_APP_CESIUM_ION_TOKEN`  | no       | Enables Cesium Ion world imagery for "Satellite"   |
+The agricultural category is intentionally broad and includes agricultural and forest-fire activity.
 
-No secret is ever hard-coded. `.env` files are not committed.
+The industrial category includes industrial fires and persistent industrial thermal sources.
 
----
+### M2 — Agricultural Event Type
+
+For observations classified as agricultural, the next stage distinguishes between:
+
+- AGRICULTURAL_FIRE
+- FOREST_FIRE
+
+### M3 — Industrial Event Type
+
+For observations classified as industrial, the next stage distinguishes between:
+
+- INDUSTRIAL_FIRE
+- PERSISTENT_SOURCE
+
+### M4 — Persistent Source Type
+
+Persistent industrial sources can then be classified into more specific source categories, including:
+
+- Brick kiln
+- Cement kiln
+- Chemical facility
+- Gas flare
+- Mining/mineral processing
+- Oil refinery/petrochemical
+- Power plant
+- Steel/metal
+- Other persistent industrial source
+
+The hierarchy prevents every thermal detection from being treated as the same type of event.
+
+
+## Data Sources
+
+### NASA FIRMS
+
+NASA FIRMS (Fire Information for Resource Management System) is the primary source of thermal observations.
+
+The data provides thermal and observation-level information including:
+
+- Latitude and longitude
+- Acquisition date and time
+- FRP
+- Brightness temperatures
+- Confidence
+- Satellite
+- Instrument
+- Day/night information
+
+ThermoIntel processes these observations as satellite-derived thermal anomalies.
+
+
+### OpenStreetMap
+
+OpenStreetMap data is used to provide geographic context around industrial facilities.
+
+Facility records can contain:
+
+- OSM identifier
+- Location
+- Facility name
+- Facility type
+- Tags
+- Source information
+- Point geometry
+
+Facility proximity is treated as contextual evidence rather than proof that a facility caused a particular thermal observation.
+
+
+### Land-Use and Geographic Data
+
+Land-use and geographic reference data are used during feature engineering to provide additional context around thermal observations.
+
+State and Union Territory information is also incorporated into the data-processing pipeline.
+
+
+### Historical Thermal Data
+
+ThermoIntel does not treat every observation as an isolated point.
+
+Historical observations around a location can be used to identify recurring or persistent thermal behaviour. Historical summaries are calculated across multiple time windows, including short-term and longer-term periods.
+
+
+## Machine Learning
+
+The machine-learning pipeline is built around XGBoost and scikit-learn.
+
+The production inference pipeline uses the same feature definitions and preprocessing contract established during model development.
+
+The core M1 pipeline uses 35 raw input features which are transformed into the encoded feature representation used by the trained model.
+
+Features include information derived from:
+
+- FIRMS thermal measurements
+- Detection confidence
+- Satellite/instrument information
+- Temporal characteristics
+- Day/night characteristics
+- Geographic location
+- State/UT
+- Land-use information
+- FRP transformations
+- Brightness relationships
+- Industrial-facility context
+- Temporal/cyclic encodings
+
+Model artifacts are serialized using Joblib and loaded by the backend during inference.
+
+
+## Backend
+
+The backend is written in Python using FastAPI.
+
+Its responsibilities include:
+
+- FIRMS ingestion
+- Data validation
+- Thermal detection storage
+- Event handling
+- Contextual enrichment
+- Feature engineering
+- Machine-learning inference
+- Dashboard APIs
+- Ingestion monitoring
+- Facility and regional queries
+- Model status and classification endpoints
+
+The backend communicates with MongoDB and exposes the data required by the frontend dashboard.
+
+
+## Frontend
+
+The frontend is built with React.
+
+The dashboard provides an operational view of the thermal observations rather than simply displaying raw data.
+
+The interface includes:
+
+- Interactive map
+- Thermal-event markers
+- Agricultural/industrial classification filters
+- Persistent-source and industrial-fire categories
+- Region filtering
+- Event details
+- Historical information
+- Priority information
+- Facility context
+- Dashboard summaries
+- Investigation views
+
+The mapping layer supports both 2D and 3D visualization, using Leaflet/React-Leaflet for the 2D map and Cesium for the 3D globe.
+
+
+## Database
+
+ThermoIntel uses MongoDB, with MongoDB Atlas used for cloud deployment.
+
+The database stores the thermal observations and related contextual information required by the application.
+
+Important data includes:
+
+- Thermal detections
+- Events
+- Facilities
+- Ingestion runs
+- Model-related information
+
+Geospatial indexes are used for location-based queries and facility searches.
+
+
+## Pipeline
+
+The main processing flow is:
+
+1. NASA FIRMS provides thermal observations.
+2. The backend validates and stores the observations.
+3. Geographic and historical context is added.
+4. Features are generated using the project's feature contract.
+5. M1 determines whether the activity is agricultural or industrial.
+6. The appropriate downstream classifier is applied.
+7. Historical behaviour and contextual information are used for anomaly analysis.
+8. A system priority value is generated.
+9. The processed information is stored in MongoDB.
+10. The React dashboard retrieves and visualizes the results through the FastAPI backend.
+
+
+## Automated Ingestion
+
+The project includes a Render cron-service configuration for automated FIRMS ingestion.
+
+The cron entrypoint calls the same ingestion implementation used by the backend API rather than maintaining a separate ingestion pipeline.
+
+The scheduled configuration is intended to periodically:
+
+- Fetch recent FIRMS observations
+- Insert new observations
+- Skip observations that already exist
+- Process the new detections
+- Run the downstream pipeline
+
+The production cron service requires the appropriate Render configuration and environment variables to be enabled.
+
 
 ## API
 
-All routes are prefixed with `/api`.
+The backend exposes API endpoints for the dashboard and pipeline.
 
-| Method | Route                     | Purpose                                            |
-| ------ | ------------------------- | -------------------------------------------------- |
-| GET    | `/health`                 | Service + database status                          |
-| GET    | `/events`                 | Filtered events (`status`, `classification`, `source_type`, `state`, `time_range`, `sort_by`, paging) |
-| GET    | `/events/summary`         | Regional Overview counts                           |
-| GET    | `/events/priority`        | Top-N highest-threat ACTIVE events                 |
-| GET    | `/events/{event_id}`      | Selected Event Intelligence payload                |
-| GET    | `/alerts`                 | Alert queue                                        |
-| GET    | `/alerts/{alert_id}`      | Single alert                                       |
-| GET    | `/facilities`             | Facility intelligence                              |
-| GET    | `/thermal-detections`     | Raw FIRMS observations                             |
-| GET    | `/ingestion/status`       | Pipeline readiness + recent runs                   |
-| POST   | `/ingestion/run`          | Trigger the pipeline (records a run per stage)      |
-| GET    | `/models`                 | Model registry + expected model stack              |
-| GET    | `/regions`                | States and Union Territories with bounding boxes   |
-| GET    | `/taxonomy`               | Frozen Phase 1 vocabulary                          |
-| GET    | `/dev/demo-data/status`   | DEMO dataset counts                                |
-| POST   | `/dev/demo-data/seed`     | Insert the DEMO dataset                            |
-| DELETE | `/dev/demo-data/clear`    | Remove the DEMO dataset                            |
+The API includes functionality for:
 
-There is deliberately **no confidence filter** (Phase 1, section 19).
+- Dashboard summaries
+- Thermal anomalies
+- Events
+- Alerts
+- Facilities
+- Regions
+- Hotspots
+- Model information
+- Classification
+- Ingestion
+- Ingestion status
 
----
+The interactive API documentation is available through FastAPI's built-in Swagger interface when the backend is running.
 
-## Live vs historical
 
-```
-RAW FIRMS DETECTIONS -> EVENT FORMATION -> THERMOINTEL EVENTS
-```
+## Project Structure
 
-* An event is `ACTIVE` while current FIRMS observations support it.
-* Only `ACTIVE` events are on the LIVE map (`viewMode = LIVE`).
-* When the live feed no longer supports an event it becomes `INACTIVE` /
-  `EXPIRED`; the document is **never deleted** and keeps feeding baselines.
-* `viewMode = HISTORICAL` widens the query to every status.
+The repository is organized roughly as follows:
 
----
+```text
+thermointel/
+│
+├── backend/
+│   ├── api/
+│   │   └── routes/
+│   ├── core/
+│   ├── data/
+│   ├── models/
+│   ├── pipeline/
+│   ├── scripts/
+│   ├── services/
+│   ├── tests/
+│   └── server.py
+│
+├── frontend/
+│   ├── public/
+│   └── src/
+│
+├── docs/
+│
+├── render.yaml
+├── README.md
+└── .gitignore
 
-## DEMO data
 
-Demo documents carry `data_origin = "demo"`. The API returns them **only** when
-a request passes `include_demo=true`, the UI toggle is **off by default**, and
-a full-width amber banner is shown whenever it is on. Set
-`ALLOW_DEMO_DATA=false` to remove the endpoints completely.
+Running Locally
+Requirements
 
-Demo values are invented for interface testing. They are not FIRMS
-observations, model predictions or threat assessments.
+Install the following before starting the project:
 
----
+Python 3.x
+Node.js
+npm
+MongoDB or a MongoDB Atlas connection
+NASA FIRMS API key
 
-## Deployment (Render + MongoDB Atlas)
+The Python environment should use versions compatible with the project's machine-learning dependencies.
 
-`render.yaml` describes the web services and the pipeline cron job.
+Backend Setup
 
-1. Create a free MongoDB Atlas cluster, a fresh v2 database, and a database
-   user. Allow Render's egress IPs (or `0.0.0.0/0` for a student project).
-2. Push this repository to GitHub.
-3. In Render, create a **Blueprint** from the repo, then set the secrets:
-   `MONGO_URL`, `DB_NAME`, `CORS_ORIGINS` (backend) and
-   `REACT_APP_BACKEND_URL` (frontend).
-4. Deploy. Indexes are created automatically on backend startup.
+Open a terminal in the backend directory:
 
-### Automatic pipeline scheduling (Render Cron Job)
+cd backend
 
-`render.yaml` declares `thermointel-pipeline-cron` (`type: cron`, every
-2 hours at :10 UTC). Each run executes `backend/scripts/run_ingestion.py`,
-which calls the SAME pipeline implementation as `POST /api/ingestion/run`
-(real NASA FIRMS ingestion, enrichment, events, ML inference, threat scoring
-and alerts; `triggered_by="render-cron"`; idempotent upserts; no demo data).
-The cron service needs `MONGO_URL`, `DB_NAME`, `FIRMS_API_KEY`,
-`FIRMS_BASE_URL` and `ACTIVE_MODEL_VERSION` set in the Render dashboard
-(Blueprint sync does not copy env vars between services).
+Create and activate a Python virtual environment if required.
 
-Note: Render bills cron jobs a minimum of $1/month (per-service, regardless
-of schedule). Run history and logs appear on the cron service's **Runs** page.
+Install dependencies:
 
-Nothing here requires paid infrastructure for the web services.
+pip install -r requirements.txt
 
----
+Create a .env file in the backend directory.
 
-## What Phase 2 intentionally does NOT do
+The main configuration values are:
 
-No model training, no model artifacts, no feature engineering, no anomaly
-algorithm, no threat-score formula, no alert threshold, no FIRMS dataset, no
-ground-truth dataset, no classification heuristics, no invented facilities, no
-weather/AQI/imagery layers, no authentication, no push notifications, no 3D
-buildings or simulated fires.
+MONGO_URL=your_mongodb_connection_string
+DB_NAME=thermointel
+FIRMS_API_KEY=your_firms_api_key
 
-Values left unfrozen by Phase 1 (grouping radius, grouping time window,
-threat weights, level boundaries, alert threshold, calibration method) are
-exposed as configuration objects whose fields are `None` until real data sets
-them.
+Additional deployment-specific variables may be required depending on the configured environment.
+
+Start the Backend
+
+From the backend directory:
+
+python -m uvicorn server:app --host 127.0.0.1 --port 8000
+
+The API will then be available at:
+
+http://127.0.0.1:8000
+
+FastAPI Swagger documentation:
+
+http://127.0.0.1:8000/docs
+Frontend Setup
+
+Open another terminal:
+
+cd frontend
+
+Install dependencies:
+
+npm install
+
+If the project requires the legacy peer-dependency resolution used by the existing dependency set:
+
+npm install --legacy-peer-deps
+
+Create the frontend environment file if it does not already exist:
+
+REACT_APP_BACKEND_URL=http://127.0.0.1:8000
+
+Start the frontend:
+
+npm start
+
+The dashboard will normally be available at:
+
+http://localhost:3000
+Production Architecture
+
+The deployed system uses:
+
+Render for application hosting
+MongoDB Atlas for the database
+GitHub for source control
+NASA FIRMS for satellite-derived thermal observations
+
+The production flow is:
+
+NASA FIRMS
+→ Backend ingestion
+→ MongoDB Atlas
+→ Feature engineering
+→ ML inference
+→ FastAPI
+→ React dashboard
+
+Deployment
+
+The repository contains a render.yaml configuration for deployment.
+
+The application can be deployed using Render with the required environment variables configured in the Render dashboard.
+
+The backend requires access to:
+
+MongoDB
+NASA FIRMS
+The trained model artifacts
+Required reference data
+
+The frontend communicates with the deployed backend through the configured backend URL.
+
+Testing
+
+Backend tests use Pytest.
+
+Run the backend test suite from the backend directory:
+
+pytest
+
+For targeted testing, individual test files can be executed directly:
+
+pytest tests/<test_file>.py
+
+The most important tests cover areas such as:
+
+API behaviour
+Data ingestion
+Feature engineering
+Model inference
+Facility context
+Pipeline behaviour
+Model Artifacts
+
+The trained models and their supporting preprocessing/configuration artifacts are stored as serialized files.
+
+The M1 inference contract includes:
+
+Model artifact
+Preprocessing artifact
+Feature schema
+Class mapping
+Model metadata
+Calibration information where applicable
+
+The backend must use the same feature order and preprocessing assumptions used when the model was trained.
+
+Changing the feature contract without retraining and regenerating compatible artifacts can break inference.
+
+Important Interpretation Notes
+
+ThermoIntel works with satellite-derived thermal observations.
+
+A thermal observation should not automatically be described as a confirmed fire.
+
+Similarly:
+
+An industrial classification is a model prediction.
+A nearby industrial facility is contextual evidence.
+A persistent thermal source is a classification, not proof of a specific industrial process.
+A system priority value is an internal prioritization signal, not an official risk rating.
+A potential industrial fire should not be described as a confirmed industrial fire without independent confirmation.
+
+These distinctions are important when interpreting results from the system.
+
+Intended Use
+
+ThermoIntel is intended to help users investigate large numbers of thermal observations more efficiently.
+
+Potential users include:
+
+Government and disaster-management authorities
+Industrial safety teams
+Emergency response teams
+Environmental authorities
+Researchers working with satellite thermal data
+
+The platform is intended to support investigation and prioritization rather than replace field verification or official emergency-response systems.
+
+Why It Matters
+
+Satellite thermal products can produce large numbers of observations across a large geographic area.
+
+Looking at those observations individually makes it difficult to identify which ones deserve attention.
+
+ThermoIntel combines:
+
+Satellite thermal measurements
+Temporal behaviour
+Geographic context
+Industrial-facility proximity
+Land-use information
+Machine learning
+
+to turn individual thermal observations into more useful, contextualized intelligence.
+
+Limitations
+
+ThermoIntel has several important limitations.
+
+NASA FIRMS observations are remote-sensing detections and do not independently establish the cause of a thermal anomaly.
+
+Industrial-facility proximity does not establish causation.
+
+Machine-learning predictions depend on the quality and coverage of their training and validation data.
+
+Some geographic locations may have incomplete contextual coverage.
+
+Independent ground-truth validation is still important before making strong real-world accuracy or safety claims.
+
+The system should therefore be treated as a monitoring and decision-support platform rather than a certified fire-detection or emergency-response authority.
+
+Future Scope
+
+Potential future improvements include:
+
+More extensive independently verified ground truth
+Additional environmental and meteorological context
+Improved event grouping and temporal continuity
+More detailed industrial-source classification
+Additional satellite sources
+Improved uncertainty estimation
+Larger-scale historical analysis
+More advanced geospatial visualization
+Improved alerting and notification workflows
+Continued validation across different geographic and seasonal conditions
+Technology Stack
+
+ThermoIntel is built using:
+
+Python
+FastAPI
+Uvicorn
+MongoDB
+MongoDB Atlas
+PyMongo / Motor
+Pydantic
+XGBoost
+scikit-learn
+Pandas
+NumPy
+Joblib
+React
+React Leaflet
+Leaflet
+Cesium
+Tailwind CSS
+Axios
+Lucide React
+Recharts
+NASA FIRMS
+OpenStreetMap
+Overpass API
+Pytest
+Git
+GitHub
+Render
+Jupyter
+Project Status
+
+ThermoIntel currently provides an end-to-end pipeline for processing real satellite-derived thermal observations, enriching them with contextual information, running machine-learning classification, storing the results, and presenting them through a web dashboard.
+
+The system is intended to continue evolving as additional ground-truth data, validation and operational requirements become available.
+
+License
+
+This project was developed as part of the Smart India Hackathon and is currently maintained as a project/research prototype.
+
+See the repository for the applicable project licensing and usage terms.
+
+
+
+I intentionally kept the README **human-readable and practical** rather than turning it into a giant technical specification. I also removed claims that the project documentation explicitly says should **not** be made, such as satellite-image analysis, TensorFlow/PyTorch, weather APIs, IoT sensors, etc. :contentReference[oaicite:2]{index=2}
+
+One correction from the older README/context: **Cesium is included here because the current project audit explicitly confirms the 3D Cesium globe alongside the 2D Leaflet map.** :contentReference[oaicite:3]{index=3}
