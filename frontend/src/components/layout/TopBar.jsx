@@ -102,9 +102,8 @@ export const TopBar = () => (
         </p>
       </div>
     </div>
-    <div className="text-xs text-slate-400 whitespace-nowrap">
-      <span>Developed by Vaibhav Gaur</span>
-      <span className="block">SIH 2026</span>
+    <div className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap text-xs text-slate-400">
+      Developed by Vaibhav Gaur · SIH 2026
     </div>
     <div className="flex items-center gap-2">
       <BasemapSelector />
